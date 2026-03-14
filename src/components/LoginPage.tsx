@@ -1,30 +1,65 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Sparkles } from 'lucide-react'
 
-export type UserRole = 'admin' | 'user'
+export type UserRole = 'faculty' | 'student'
 
-interface LoginPageProps {
-  onLogin: (email: string, password: string, role: UserRole) => { success: boolean; message?: string }
+export interface FacultyRegistrationDetails {
+  facultyName: string
+  facultyDepartment: string
+  facultyEmail: string
+  facultyId: string
+  phoneNumber: string
+  designation: string
+  password: string
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps) {
+export interface StudentLoginDetails {
+  studentId: string
+  email: string
+  password: string
+}
+
+interface LoginPageProps {
+  onLogin: (
+    creds:
+      | { role: 'faculty'; email: string; password: string }
+      | { role: 'student'; studentId: string; email: string; password: string },
+  ) => { success: boolean; message?: string }
+
+  onRegisterFaculty: (details: FacultyRegistrationDetails) => { success: boolean; message?: string }
+}
+
+export default function LoginPage({ onLogin, onRegisterFaculty }: LoginPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [studentId, setStudentId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [selectedRole, setSelectedRole] = useState<UserRole>('user')
+  const [selectedRole, setSelectedRole] = useState<UserRole>('student')
+
+  // Faculty registration fields
+  const [facultyName, setFacultyName] = useState('')
+  const [facultyDepartment, setFacultyDepartment] = useState('')
+  const [facultyId, setFacultyId] = useState('')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [designation, setDesignation] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
     // Validation
+    if (selectedRole === 'student' && !studentId.trim()) {
+      setError('Student ID is required')
+      return
+    }
+
     if (!email.trim()) {
-      setError('Email is required')
+      setError(selectedRole === 'faculty' ? 'Faculty Email is required' : 'Email is required')
       return
     }
 
@@ -43,15 +78,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    if (isSignUp && selectedRole === 'admin') {
-      setError('Admin accounts are managed by system owners. Please use User sign up.')
-      return
+    if (isSignUp && selectedRole === 'faculty') {
+      if (!facultyName.trim()) return setError('Faculty Name is required')
+      if (!facultyDepartment.trim()) return setError('Faculty Department is required')
+      if (!facultyId.trim()) return setError('Faculty ID is required')
+      if (!phoneNumber.trim()) return setError('Phone Number is required')
+      if (!designation.trim()) return setError('Designation is required')
     }
 
     // Simulate API call
     setIsLoading(true)
     setTimeout(() => {
-      const result = onLogin(email, password, selectedRole)
+      const result =
+        isSignUp && selectedRole === 'faculty'
+          ? onRegisterFaculty({
+              facultyName,
+              facultyDepartment,
+              facultyEmail: email,
+              facultyId,
+              phoneNumber,
+              designation,
+              password,
+            })
+          : selectedRole === 'faculty'
+            ? onLogin({ role: 'faculty', email, password })
+            : onLogin({ role: 'student', studentId, email, password })
       setIsLoading(false)
       if (!result.success) {
         setError(result.message || 'Invalid credentials')
@@ -95,8 +146,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">VideoCall Pro</h1>
-          <p className="text-slate-400">Professional video conferencing platform</p>
-          <p className="text-xs text-slate-500 mt-2">Demo admin login: any admin email/username + password admin123</p>
+          <p className="text-slate-400">University video meetings & academic management</p>
         </motion.div>
 
         {/* Login Card */}
@@ -143,39 +193,39 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Role Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-slate-300 mb-2">Login As</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Continue As</label>
             <div className="grid grid-cols-2 gap-2">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => {
-                  setSelectedRole('admin')
+                  setSelectedRole('faculty')
                   setError('')
                 }}
                 className={`py-2 rounded-lg font-medium transition-all border ${
-                  selectedRole === 'admin'
+                  selectedRole === 'faculty'
                     ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
                     : 'text-slate-400 border-white/10 hover:text-slate-300'
                 }`}
               >
-                Admin
+                Faculty
               </motion.button>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 type="button"
                 onClick={() => {
-                  setSelectedRole('user')
+                  setSelectedRole('student')
                   setError('')
                 }}
                 className={`py-2 rounded-lg font-medium transition-all border ${
-                  selectedRole === 'user'
+                  selectedRole === 'student'
                     ? 'bg-cyan-500/20 text-cyan-200 border-cyan-400/40'
                     : 'text-slate-400 border-white/10 hover:text-slate-300'
                 }`}
               >
-                User
+                Student
               </motion.button>
             </div>
           </div>
@@ -193,10 +243,84 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </motion.div>
             )}
 
+            {/* Student ID (Student only) */}
+            {selectedRole === 'student' && (
+              <div className="relative">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Student ID</label>
+                <input
+                  type="text"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  placeholder="e.g., STU20250123"
+                  className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 transition-all"
+                />
+              </div>
+            )}
+
+            {/* Faculty registration fields (Sign up + Faculty only) */}
+            {isSignUp && selectedRole === 'faculty' && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-3"
+              >
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Faculty Name</label>
+                  <input
+                    type="text"
+                    value={facultyName}
+                    onChange={(e) => setFacultyName(e.target.value)}
+                    placeholder="Dr. Jane Doe"
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Faculty Department</label>
+                  <input
+                    type="text"
+                    value={facultyDepartment}
+                    onChange={(e) => setFacultyDepartment(e.target.value)}
+                    placeholder="CSE"
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Faculty ID</label>
+                  <input
+                    type="text"
+                    value={facultyId}
+                    onChange={(e) => setFacultyId(e.target.value)}
+                    placeholder="FAC-102"
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="+1 555 123 4567"
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Designation</label>
+                  <input
+                    type="text"
+                    value={designation}
+                    onChange={(e) => setDesignation(e.target.value)}
+                    placeholder="Assistant Professor"
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 transition-all"
+                  />
+                </div>
+              </motion.div>
+            )}
+
             {/* Email Field */}
             <div className="relative">
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Email Address
+                {selectedRole === 'faculty' ? 'Faculty Email' : 'Email Address'}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
@@ -297,12 +421,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 <>
                   <span>
                     {isSignUp
-                      ? selectedRole === 'admin'
-                        ? 'Admin Sign Up'
-                        : 'Create Account'
-                      : `Login as ${selectedRole === 'admin' ? 'Admin' : 'User'}`}
+                      ? selectedRole === 'faculty'
+                        ? 'Create Faculty Profile'
+                        : 'Create Student Account'
+                      : `Login as ${selectedRole === 'faculty' ? 'Faculty' : 'Student'}`}
                   </span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
             </motion.button>
@@ -318,8 +441,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             >
               <p className="text-xs text-slate-400 mb-2 font-medium">Demo Credentials:</p>
               <div className="space-y-1 text-xs text-slate-300">
-                <p>Admin: <span className="font-mono text-amber-300">admin@demo.com / admin123</span></p>
-                <p>User: <span className="font-mono text-cyan-300">any email / min 6-char password</span></p>
+                <p>Faculty: <span className="font-mono text-amber-300">faculty@demo.com / any 6+ char password</span></p>
+                <p>Student: <span className="font-mono text-cyan-300">STU001 + student@demo.com / any 6+ char password</span></p>
               </div>
             </motion.div>
           )}
