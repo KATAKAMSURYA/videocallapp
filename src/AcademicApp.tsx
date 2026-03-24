@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react'
 import LoginPage, { type FacultyRegistrationDetails, type UserRole } from './components/LoginPage'
 import AcademicSidebar, { type AcademicNavItem } from './components/AcademicSidebar'
 import AcademicStructure, {
+  type FacultyProfile,
+} from './components/AcademicStructure'
+import {
   type AcademicFacultyRoot,
   type AcademicSection,
-  type FacultyProfile,
   type StudentRecord,
-} from './components/AcademicStructure'
+} from './components/HierarchicalSidebar'
 import FacultyStudentDashboard from './components/FacultyStudentDashboard'
 import Toast from './components/Toast'
 
@@ -213,7 +215,7 @@ export default function AcademicApp() {
     // pass selection via a small event in localStorage (simple cross-component signal)
     try {
       localStorage.setItem('selectedSectionId', sectionId)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }

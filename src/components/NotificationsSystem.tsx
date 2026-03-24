@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, CheckCircle, AlertCircle, Info, X } from 'lucide-react'
+import { EmptyState } from './EmptyStates'
 
 // Browser notification service
 export function useBrowserNotification() {
@@ -328,8 +329,11 @@ export function NotificationPanel({
             exit={{ opacity: 0, x: 100 }}
             className="fixed right-0 top-0 h-full w-80 glass border-l border-slate-700/50 p-4 z-50 overflow-y-auto"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white">Notifications</h3>
+            <div className="flex items-center justify-between mb-4 gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-white">Notifications</h3>
+                <p className="text-xs text-slate-400 mt-1">Meeting invites, reminders, and recent activity appear here.</p>
+              </div>
               <motion.button
                 whileHover={{ scale: 1.2 }}
                 onClick={onClose}
@@ -340,7 +344,12 @@ export function NotificationPanel({
             </div>
 
             {notifications.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">No notifications</p>
+              <div className="py-8">
+                <EmptyState
+                  message="No notifications yet"
+                  subMessage="New meeting invites, reminders, and activity updates will show up here."
+                />
+              </div>
             ) : (
               <div className="space-y-3 mb-4">
                 {notifications.map((notif) => (

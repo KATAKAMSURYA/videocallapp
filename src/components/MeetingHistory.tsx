@@ -125,7 +125,7 @@ export default function MeetingHistory({ meetings, onPlayRecording }: MeetingHis
       <div className="flex gap-2 mb-4">
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value as any)}
+          onChange={(e) => setFilter(e.target.value as 'all' | 'day' | 'week' | 'month')}
           className="flex-1 px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white text-sm"
         >
           <option value="all">All Time</option>
@@ -136,7 +136,7 @@ export default function MeetingHistory({ meetings, onPlayRecording }: MeetingHis
 
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
+          onChange={(e) => setSortBy(e.target.value as 'date' | 'duration')}
           className="flex-1 px-3 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white text-sm"
         >
           <option value="date">Sort by Date</option>

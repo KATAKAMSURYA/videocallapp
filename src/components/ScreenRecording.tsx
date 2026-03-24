@@ -64,9 +64,10 @@ export default function ScreenRecording({ videoStream, onToast }: ScreenRecordin
       }, 1000)
 
       onToast('Recording started', 'success')
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
       console.error('Recording error:', error)
-      onToast('Failed to start recording: ' + error.message, 'error')
+      onToast('Failed to start recording: ' + message, 'error')
     }
   }
 

@@ -9,7 +9,7 @@ import {
   Settings,
   ChevronRight,
 } from 'lucide-react'
-import type { AcademicFacultyRoot } from './AcademicStructure'
+import type { AcademicFacultyRoot } from './HierarchicalSidebar'
 import { useState } from 'react'
 
 export type AcademicNavItem =
@@ -116,7 +116,7 @@ export default function AcademicSidebar({ isOpen, selected, onSelect, academicDa
 
                           {expanded[dept.id] && (
                             <div className="ml-3 mt-1 space-y-1">
-                              {dept.branches.map((branch) => (
+                              {(dept.branches || []).map((branch) => (
                                 <div key={branch.id}>
                                   <button
                                     onClick={() => toggle(branch.id)}

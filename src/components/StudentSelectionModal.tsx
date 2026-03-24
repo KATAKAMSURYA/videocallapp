@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Users, UserCheck, UserPlus, Video, Check } from 'lucide-react'
 import type { StudentRecord, AcademicSection } from './HierarchicalSidebar'
@@ -7,7 +7,7 @@ interface StudentSelectionModalProps {
   isOpen: boolean
   onClose: () => void
   section: AcademicSection
-  onStartMeeting: (selectedStudents: StudentRecord[]) => void
+  onStartMeeting: (selectedStudents: StudentRecord[], section: AcademicSection) => void
 }
 
 export default function StudentSelectionModal({
@@ -18,6 +18,12 @@ export default function StudentSelectionModal({
 }: StudentSelectionModalProps) {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set())
   const [draggedStudent, setDraggedStudent] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedStudents(new Set(section.students.map((student) => student.id)))
+    }
+  }, [isOpen, section])
 
   if (!isOpen) return null
 
@@ -41,7 +47,7 @@ export default function StudentSelectionModal({
 
   const handleStartMeeting = () => {
     const selected = section.students.filter(student => selectedStudents.has(student.id))
-    onStartMeeting(selected)
+    onStartMeeting(selected.length > 0 ? selected : section.students, section)
   }
 
   const handleDragStart = (e: React.DragEvent, studentId: string) => {
@@ -75,7 +81,7 @@ export default function StudentSelectionModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl bg-slate-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden"
+        className="w-full max-w-4xl bg-slate-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
@@ -96,7 +102,7 @@ export default function StudentSelectionModal({
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {/* Quick Actions */}
           <div className="flex items-center gap-4 mb-6">
             <button

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
-import { Calendar, CheckCircle2, Clapperboard, GraduationCap, Video } from 'lucide-react'
+import { Calendar, Clapperboard, GraduationCap, Video } from 'lucide-react'
 
-export default function FacultyStudentDashboard({ role, onQuickStartMeeting }: { role: 'faculty' | 'student'; onQuickStartMeeting?: () => void }) {
+export default function FacultyStudentDashboard({ role, onQuickStartMeeting, onNavigate }: { role: 'faculty' | 'student'; onQuickStartMeeting?: () => void; onNavigate?: (nav: string) => void }) {
   return (
     <div className="w-full h-full">
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
@@ -27,14 +27,10 @@ export default function FacultyStudentDashboard({ role, onQuickStartMeeting }: {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-4">
           <div className="text-slate-400 text-sm">Meetings</div>
           <div className="text-3xl font-bold text-blue-200">12</div>
-        </div>
-        <div className="glass rounded-xl p-4">
-          <div className="text-slate-400 text-sm">Attendance</div>
-          <div className="text-3xl font-bold text-emerald-200">87%</div>
         </div>
         <div className="glass rounded-xl p-4">
           <div className="text-slate-400 text-sm">Recordings</div>
@@ -47,31 +43,25 @@ export default function FacultyStudentDashboard({ role, onQuickStartMeeting }: {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all">
+        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all" onClick={() => onNavigate?.('academic-structure')}>
           <GraduationCap className="w-5 h-5 text-cyan-300 mb-3" />
           <h3 className="text-white font-semibold">Academic Structure</h3>
-          <p className="text-slate-400 text-sm mt-1">Browse departments, branches, and sections.</p>
+          <p className="text-slate-400 text-sm mt-1">Browse departments, academic years, and students.</p>
         </button>
 
-        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all">
+        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all" onClick={() => onNavigate?.('meetings')}>
           <Video className="w-5 h-5 text-blue-300 mb-3" />
           <h3 className="text-white font-semibold">Meetings</h3>
           <p className="text-slate-400 text-sm mt-1">Start, join, and manage video meetings.</p>
         </button>
 
-        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all">
-          <CheckCircle2 className="w-5 h-5 text-emerald-300 mb-3" />
-          <h3 className="text-white font-semibold">Attendance</h3>
-          <p className="text-slate-400 text-sm mt-1">Review attendance percentages by section.</p>
-        </button>
-
-        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all">
+        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all" onClick={() => onNavigate?.('recordings')}>
           <Clapperboard className="w-5 h-5 text-violet-300 mb-3" />
           <h3 className="text-white font-semibold">Recordings</h3>
           <p className="text-slate-400 text-sm mt-1">Access recordings and meeting summaries.</p>
         </button>
 
-        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all">
+        <button className="glass rounded-xl p-5 text-left hover:bg-white/10 transition-all" onClick={() => onNavigate?.('meetings')}>
           <Calendar className="w-5 h-5 text-amber-300 mb-3" />
           <h3 className="text-white font-semibold">Schedule</h3>
           <p className="text-slate-400 text-sm mt-1">Schedule academic sessions and reminders.</p>

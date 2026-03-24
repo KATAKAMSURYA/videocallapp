@@ -10,7 +10,7 @@ export function AccessibleButton({
   disabled = false,
   className = '',
   ...props
-}: {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: React.ReactNode
   onClick: () => void
   ariaLabel: string
@@ -18,7 +18,6 @@ export function AccessibleButton({
   ariaDescribedBy?: string
   disabled?: boolean
   className?: string
-  [key: string]: any
 }) {
   return (
     <button

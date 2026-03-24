@@ -30,13 +30,21 @@ export default function CalendarIntegration({
   onToast,
 }: CalendarIntegrationProps) {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    title: string
+    date: string
+    duration: number
+    participants: string[]
+    participantEmail: string
+    recurring: ScheduledMeeting['recurring']
+    reminder: number
+  }>({
     title: '',
     date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     duration: 60,
-    participants: [] as string[],
+    participants: [],
     participantEmail: '',
-    recurring: 'none' as const,
+    recurring: 'none',
     reminder: 15,
   })
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([])
@@ -399,7 +407,12 @@ export default function CalendarIntegration({
               <label className="text-sm font-semibold text-slate-300">Repeat</label>
               <select
                 value={formData.recurring}
-                onChange={(e) => setFormData({ ...formData, recurring: e.target.value as any })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    recurring: e.target.value as ScheduledMeeting['recurring'],
+                  })
+                }
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-700/50 border-2 border-slate-600 text-white focus:outline-none focus:border-blue-500"
               >
                 <option value="none">Don't repeat</option>

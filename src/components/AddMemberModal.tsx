@@ -51,7 +51,7 @@ export default function AddMemberModal({
       if (formData.email && !formData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
         newErrors.email = 'Invalid email format'
       }
-      if (formData.phone && !formData.phone.match(/^[\d\s\-\+\(\)]{10,}$/)) {
+      if (formData.phone && !formData.phone.match(/^[\d\s+()-]{10,}$/)) {
         newErrors.phone = 'Invalid phone format (min 10 digits)'
       }
     }
@@ -255,7 +255,7 @@ export default function AddMemberModal({
                     <label className="block text-sm font-semibold text-slate-300 mb-2">Year</label>
                     <select
                       value={formData.year}
-                      onChange={(e) => setFormData({ ...formData, year: e.target.value as any })}
+                      onChange={(e) => setFormData({ ...formData, year: e.target.value as NonNullable<TeamMember['year']> })}
                       className="w-full px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700 text-white focus:outline-none focus:border-blue-500"
                     >
                       {YEARS.map((year) => (

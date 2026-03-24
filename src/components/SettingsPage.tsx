@@ -55,6 +55,8 @@ interface SettingsPageProps {
   initialTab?: 'profile' | 'meeting' | 'notifications' | 'privacy' | 'appearance' | 'account'
 }
 
+type SettingsTabId = NonNullable<SettingsPageProps['initialTab']>
+
 const defaultSettings: UserSettings = {
   profilePicture: '👤',
   fullName: 'Demo User',
@@ -99,16 +101,14 @@ const defaultSettings: UserSettings = {
 
 export default function SettingsPage({ onBack, initialTab = 'profile' }: SettingsPageProps) {
   const [settings, setSettings] = useState<UserSettings>(defaultSettings)
-  const [activeTab, setActiveTab] = useState<
-    'profile' | 'meeting' | 'notifications' | 'privacy' | 'appearance' | 'account'
-  >(initialTab)
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [twoFAEnabled, setTwoFAEnabled] = useState(false)
 
-  const tabs = [
+  const tabs: Array<{ id: SettingsTabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'meeting', label: 'Meeting Prefs', icon: Camera },
     { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -117,7 +117,7 @@ export default function SettingsPage({ onBack, initialTab = 'profile' }: Setting
     { id: 'account', label: 'Account', icon: Shield },
   ]
 
-  const handleSettingChange = (key: keyof UserSettings, value: any) => {
+  const handleSettingChange = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }))
   }
 
@@ -212,7 +212,7 @@ export default function SettingsPage({ onBack, initialTab = 'profile' }: Setting
               key={status.value}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleSettingChange('status', status.value)}
+              onClick={() => handleSettingChange('status', status.value as UserSettings['status'])}
               className={`px-4 py-3 rounded-lg font-medium transition-all ${
                 settings.status === status.value
                   ? `bg-gradient-to-r ${status.color} text-white shadow-lg`
@@ -569,7 +569,7 @@ export default function SettingsPage({ onBack, initialTab = 'profile' }: Setting
               key={option.value}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleSettingChange('privacyLevel', option.value)}
+              onClick={() => handleSettingChange('privacyLevel', option.value as UserSettings['privacyLevel'])}
               className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
                 settings.privacyLevel === option.value
                   ? 'bg-blue-500/20 border border-blue-500/50 text-white'
@@ -639,7 +639,7 @@ export default function SettingsPage({ onBack, initialTab = 'profile' }: Setting
               key={layout.value}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleSettingChange('layoutStyle', layout.value)}
+              onClick={() => handleSettingChange('layoutStyle', layout.value as UserSettings['layoutStyle'])}
               className={`w-full text-left px-4 py-3 rounded-lg transition-all ${
                 settings.layoutStyle === layout.value
                   ? 'bg-blue-500/20 border border-blue-500/50 text-white'
@@ -777,7 +777,7 @@ export default function SettingsPage({ onBack, initialTab = 'profile' }: Setting
               key={tab.id}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap transition-all ${
                 activeTab === tab.id
                   ? 'bg-blue-500/30 border border-blue-500/50 text-blue-200'

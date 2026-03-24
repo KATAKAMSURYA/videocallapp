@@ -27,7 +27,6 @@ export function HoverButton({
   size = 'md',
   className = '',
   disabled = false,
-  ...props
 }: {
   children: React.ReactNode
   onClick?: () => void
@@ -35,7 +34,6 @@ export function HoverButton({
   size?: 'sm' | 'md' | 'lg'
   className?: string
   disabled?: boolean
-  [key: string]: any
 }) {
   const sizeClasses = {
     sm: 'px-3 py-1.5 text-sm',
@@ -64,7 +62,6 @@ export function HoverButton({
         focus:outline-none focus:ring-2 focus:ring-blue-500
         ${className}
       `}
-      {...props}
     >
       <motion.span
         initial={{ opacity: 0 }}
@@ -77,13 +74,13 @@ export function HoverButton({
 }
 
 // Staggered list animation
-export function StaggeredList({
+export function StaggeredList<T>({
   items,
   children,
   delay = 0.1,
 }: {
-  items: any[]
-  children: (item: any, index: number) => React.ReactNode
+  items: T[]
+  children: (item: T, index: number) => React.ReactNode
   delay?: number
 }) {
   const containerVariants = {

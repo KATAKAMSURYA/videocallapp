@@ -2,14 +2,21 @@ import { useState } from 'react'
 import LoginPage, { type FacultyRegistrationDetails } from './components/LoginPage'
 import type { UserRole } from './components/LoginPage'
 import Toast from './components/Toast'
+import SettingsPage from './components/SettingsPage'
+import CalendarIntegration, { type ScheduledMeeting } from './components/CalendarIntegration'
+import MeetingHistory, { type MeetingRecord } from './components/MeetingHistory'
+import { NotificationBell, NotificationPanel } from './components/NotificationsSystem'
+import { EmptyState, EmptyStateContainer, NoMeetingHistoryEmptyState } from './components/EmptyStates'
+import { CalendarDays } from 'lucide-react'
 import HierarchicalSidebar, { 
   type AcademicNavItem,
   type AcademicFacultyRoot,
   type AcademicSection,
   type StudentRecord,
-} from './components/HierarchicalSidebar'
-import type { FacultyProfile } from './components/AcademicStructure'
+} from './components/HierarchicalSidebar.tsx'
+import type { FacultyProfile } from './components/AcademicStructure.tsx'
 import FacultyStudentDashboard from './components/FacultyStudentDashboard'
+import AcademicStructure from './components/AcademicStructure.tsx'
 import MeetingRoom from './components/MeetingRoom'
 import StudentSelectionModal from './components/StudentSelectionModal'
 
@@ -17,6 +24,13 @@ interface ToastItem {
   id: string
   message: string
   type: 'info' | 'success' | 'warning' | 'error'
+}
+
+interface ActivityNotification {
+  id: string
+  title: string
+  message: string
+  timestamp: Date
 }
 
 interface UserProfile {
@@ -57,7 +71,7 @@ const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
 }
 
 // Mock academic structure data with detailed student information
-const academicRoot: AcademicFacultyRoot = {
+const initialAcademicRoot: AcademicFacultyRoot = {
   id: 'CSE_FACULTY',
   name: 'Computer Science & Engineering',
   departments: [
@@ -217,6 +231,13 @@ const academicRoot: AcademicFacultyRoot = {
 }
 
 function App() {
+  const initialJoinMeetingId = (() => {
+    const rawHash = window.location.hash.replace(/^#/, '')
+    return rawHash.startsWith('join/') ? decodeURIComponent(rawHash.slice('join/'.length)).trim() : ''
+  })()
+
+  const [academicRoot, setAcademicRoot] = useState<AcademicFacultyRoot>(initialAcademicRoot)
+
   // ==================== AUTHENTICATION ====================
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
@@ -228,10 +249,22 @@ function App() {
     title: string
     section: AcademicSection
     selectedStudents: StudentRecord[]
+    startedAt: Date
+    attendanceMap: Record<string, boolean>
   } | null>(null)
+  const [meetingHistory, setMeetingHistory] = useState<MeetingRecord[]>([])
+  const [scheduledMeetings, setScheduledMeetings] = useState<ScheduledMeeting[]>([])
+  const [joinMeetingId, setJoinMeetingId] = useState(initialJoinMeetingId)
+  const [activityNotifications, setActivityNotifications] = useState<ActivityNotification[]>([])
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false)
   
   const [showStudentSelection, setShowStudentSelection] = useState(false)
   const [selectedSection, setSelectedSection] = useState<AcademicSection | null>(null)
+  const [postMeetingRecord, setPostMeetingRecord] = useState<MeetingRecord | null>(null)
+  const [shareOptions, setShareOptions] = useState({
+    includeRecording: true,
+    includeSummary: true,
+  })
 
   const handleLogin = (
     creds:
@@ -246,50 +279,58 @@ function App() {
     }
 
     if (creds.role === 'faculty') {
-      // Demo faculty login or check registered faculty
-      if (normalizedEmail === 'faculty@demo.com' || facultyDirectory[normalizedEmail]) {
-        const faculty = facultyDirectory[normalizedEmail] || {
-          facultyId: 'DEMO_FAC_001',
-          name: 'Dr. Demo Faculty',
-          email: normalizedEmail,
-          department: 'Computer Science & Engineering',
-          phone: '+91-9999999999',
-          designation: 'Professor',
-        }
-        
-        const user: UserProfile = {
-          id: 'faculty-' + Date.now(),
-          email: normalizedEmail,
-          name: faculty.name,
-          avatar: '👩‍🏫',
-          role: 'faculty',
-          facultyProfile: faculty,
-        }
-        setCurrentUser(user)
-        setIsAuthenticated(true)
-        return { success: true }
-      } else {
-        return { success: false, message: 'Faculty profile not found. Please register first.' }
-      }
-    }
+      const emailPrefix = normalizedEmail.split('@')[0] || 'faculty'
+      const formattedName = emailPrefix
+        .split(/[._-]/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
 
-    // Student demo login or regular login
-    if (normalizedEmail === 'student@demo.com' || normalizedEmail.includes('student')) {
-      const studentName = normalizedEmail.split('@')[0]
-      const user: UserProfile = {
-        id: 'student-' + Date.now(),
+      const faculty = facultyDirectory[normalizedEmail] || {
+        facultyId: normalizedEmail === 'faculty@demo.com' ? 'DEMO_FAC_001' : `FAC-${Date.now().toString().slice(-5)}`,
+        name: formattedName || 'Faculty User',
         email: normalizedEmail,
-        name: studentName.charAt(0).toUpperCase() + studentName.slice(1),
-        avatar: '🎓',
-        role: 'student',
-        studentId: (creds as any).studentId?.trim() || 'STU001',
+        department: 'Computer Science & Engineering',
+        phone: '+91-9999999999',
+        designation: 'Professor',
       }
+
+      if (!facultyDirectory[normalizedEmail]) {
+        setFacultyDirectory((prev) => ({ ...prev, [normalizedEmail]: faculty }))
+      }
+
+      const user: UserProfile = {
+        id: 'faculty-' + Date.now(),
+        email: normalizedEmail,
+        name: faculty.name,
+        avatar: '👩‍🏫',
+        role: 'faculty',
+        facultyProfile: faculty,
+      }
+
       setCurrentUser(user)
       setIsAuthenticated(true)
       return { success: true }
     }
 
-    return { success: false, message: 'Invalid credentials' }
+    const studentNameSeed = normalizedEmail.split('@')[0] || 'student'
+    const studentName = studentNameSeed
+      .split(/[._-]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+
+    const user: UserProfile = {
+      id: 'student-' + Date.now(),
+      email: normalizedEmail,
+      name: studentName || 'Student User',
+      avatar: '🎓',
+      role: 'student',
+      studentId: creds.studentId.trim() || 'STU001',
+    }
+    setCurrentUser(user)
+    setIsAuthenticated(true)
+    return { success: true }
   }
 
   const handleRegisterFaculty = (details: FacultyRegistrationDetails): AuthResult => {
@@ -319,7 +360,7 @@ function App() {
 
   // ==================== NAV / LAYOUT ====================
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [selectedNav, setSelectedNav] = useState<AcademicNavItem>('dashboard')
+  const [selectedNav, setSelectedNav] = useState<AcademicNavItem>(initialJoinMeetingId ? 'meetings' : 'dashboard')
 
   // ==================== TOASTS ====================
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -329,7 +370,35 @@ function App() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3200)
   }
 
+  const addActivityNotification = (title: string, message: string) => {
+    const id = `notif-${Date.now()}-${Math.random()}`
+    setActivityNotifications((prev) => [{ id, title, message, timestamp: new Date() }, ...prev].slice(0, 30))
+  }
+
   const permissions = currentUser ? ROLE_PERMISSIONS[currentUser.role] : ROLE_PERMISSIONS.student
+
+  const getFirstAvailableSection = (): AcademicSection | null => {
+    for (const department of academicRoot.departments) {
+      const firstYear = department.years?.find((year: { students: StudentRecord[] }) => year.students.length > 0)
+      if (firstYear) {
+        return {
+          id: `${department.id}_year_${firstYear.yearNumber}`,
+          name: `${department.name} - Year ${firstYear.yearNumber}`,
+          students: firstYear.students,
+          subject: `${department.name} Year ${firstYear.yearNumber}`,
+          departmentName: department.name,
+          yearNumber: firstYear.yearNumber,
+        }
+      }
+
+      const firstLegacySection = department.branches?.[0]?.sections?.[0]
+      if (firstLegacySection) {
+        return firstLegacySection
+      }
+    }
+
+    return null
+  }
 
   const handleStartMeetingForSection = (section: AcademicSection) => {
     if (!permissions.canStartMeetingsForSection) {
@@ -342,31 +411,174 @@ function App() {
     setShowStudentSelection(true)
   }
 
-  const handleStudentSelectionComplete = (selectedStudents: StudentRecord[]) => {
-    if (!selectedSection) return
-    
+  const handleStudentSelectionComplete = (selectedStudents: StudentRecord[], section: AcademicSection) => {
     const meetingId = `meeting-${Date.now()}`
-    const meetingTitle = `${selectedSection.name} - ${selectedSection.subject || 'Class Meeting'}`
+    const meetingTitle = `${section.name} - ${section.subject || 'Class Meeting'}`
+    const attendanceMap = selectedStudents.reduce<Record<string, boolean>>((acc, student) => {
+      acc[student.id] = false
+      return acc
+    }, {})
     
     setCurrentMeeting({
       id: meetingId,
       title: meetingTitle,
-      section: selectedSection,
+      section,
       selectedStudents,
+      startedAt: new Date(),
+      attendanceMap,
     })
     
     setShowStudentSelection(false)
     setSelectedSection(null)
     
-    addToast(`Meeting started with ${selectedStudents.length} students from ${selectedSection.name}`, 'success')
+    addToast(`Meeting started with ${selectedStudents.length} students from ${section.name}`, 'success')
+    addActivityNotification('Meeting Started', `${meetingTitle} with ${selectedStudents.length} students.`)
+  }
+
+  const handleToggleAttendance = (studentId: string) => {
+    setCurrentMeeting((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        attendanceMap: {
+          ...prev.attendanceMap,
+          [studentId]: !prev.attendanceMap[studentId],
+        },
+      }
+    })
   }
 
   const handleEndMeeting = () => {
     if (currentMeeting) {
+      const durationMinutes = Math.max(1, Math.round((Date.now() - currentMeeting.startedAt.getTime()) / 60000))
+      const attendanceReport = currentMeeting.selectedStudents.map((student) => ({
+        name: student.name,
+        status: currentMeeting.attendanceMap[student.id] ? 'Attended' as const : 'Absent' as const,
+      }))
+      const absentMembers = attendanceReport
+        .filter((item) => item.status === 'Absent')
+        .map((item) => item.name)
+      const attendedCount = attendanceReport.filter((item) => item.status === 'Attended').length
+
+      const record: MeetingRecord = {
+        id: currentMeeting.id,
+        title: currentMeeting.title,
+        date: currentMeeting.startedAt,
+        duration: durationMinutes,
+        participants: [currentUser?.name || 'Host', ...currentMeeting.selectedStudents.map((s) => s.name)],
+        host: currentUser?.name || 'Host',
+        recording: `https://example.edu/recordings/${currentMeeting.id}`,
+        summary: `Meeting completed for ${currentMeeting.section.name}. Attendance: ${attendedCount}/${currentMeeting.selectedStudents.length} students attended.`,
+        keyPoints: [
+          `Section: ${currentMeeting.section.name}`,
+          `Subject: ${currentMeeting.section.subject || 'General Meeting'}`,
+          `Participants invited: ${currentMeeting.selectedStudents.length}`,
+          `Students attended: ${attendedCount}`,
+          `Students absent: ${absentMembers.length}`,
+        ],
+        attendanceReport,
+        absentMembers,
+        autoSharedWithAbsent: false,
+      }
+
+      setMeetingHistory((prev) => [record, ...prev])
+      setPostMeetingRecord(record)
+      setShareOptions({ includeRecording: true, includeSummary: true })
       addToast(`Meeting "${currentMeeting.title}" has ended.`, 'info')
+      addActivityNotification('Meeting Ended', `${currentMeeting.title} ended (${durationMinutes} min).`)
       setCurrentMeeting(null)
-      setSelectedNav('dashboard')
+      setSelectedNav('recordings')
     }
+  }
+
+  const handleSendMeetingPackage = (target: 'absent' | 'all') => {
+    if (!postMeetingRecord) return
+
+    const recipients = target === 'absent'
+      ? (postMeetingRecord.absentMembers || [])
+      : (postMeetingRecord.attendanceReport || []).map((item) => item.name)
+
+    if (recipients.length === 0) {
+      addToast(target === 'absent' ? 'No absent students to send the package.' : 'No recipients found.', 'warning')
+      return
+    }
+
+    const payloadParts: string[] = []
+    if (shareOptions.includeRecording) payloadParts.push('recording')
+    if (shareOptions.includeSummary) payloadParts.push('summary')
+
+    if (payloadParts.length === 0) {
+      addToast('Select at least one item to send.', 'warning')
+      return
+    }
+
+    addToast(
+      `Sent ${payloadParts.join(', ')} to ${recipients.length} ${target === 'absent' ? 'absent student(s)' : 'student(s)'}.`,
+      'success',
+    )
+    addActivityNotification(
+      'Meeting Package Sent',
+      `${postMeetingRecord.title}: sent ${payloadParts.join(', ')} to ${target === 'absent' ? 'absent students' : 'all students'}.`,
+    )
+
+    if (target === 'absent') {
+      setMeetingHistory((prev) =>
+        prev.map((meeting) =>
+          meeting.id === postMeetingRecord.id
+            ? { ...meeting, autoSharedWithAbsent: true }
+            : meeting,
+        ),
+      )
+      setPostMeetingRecord((prev) => (prev ? { ...prev, autoSharedWithAbsent: true } : prev))
+    }
+  }
+
+  const handleScheduleMeeting = (meeting: Omit<ScheduledMeeting, 'id'>) => {
+    const newMeeting: ScheduledMeeting = {
+      ...meeting,
+      id: `sch-${Date.now()}`,
+    }
+    setScheduledMeetings((prev) => [newMeeting, ...prev])
+    addActivityNotification('Meeting Scheduled', `${newMeeting.title} on ${newMeeting.date.toLocaleString()}`)
+  }
+
+  const handleDeleteScheduledMeeting = (id: string) => {
+    setScheduledMeetings((prev) => prev.filter((meeting) => meeting.id !== id))
+    addToast('Scheduled meeting deleted', 'info')
+  }
+
+  const handlePlayRecording = (recordingUrl: string) => {
+    window.open(recordingUrl, '_blank', 'noopener,noreferrer')
+    addToast('Opening recording in a new tab.', 'info')
+  }
+
+  const handleJoinMeeting = () => {
+    const normalizedId = joinMeetingId.trim()
+    if (!normalizedId) {
+      addToast('Please enter a meeting ID', 'warning')
+      return
+    }
+
+    const defaultSection = getFirstAvailableSection()
+    if (!defaultSection) {
+      addToast('No section data found to join meeting', 'error')
+      return
+    }
+
+    setCurrentMeeting({
+      id: normalizedId,
+      title: `Joined Meeting - ${normalizedId}`,
+      section: defaultSection,
+      selectedStudents: defaultSection.students.slice(0, 4),
+      startedAt: new Date(),
+      attendanceMap: defaultSection.students.slice(0, 4).reduce<Record<string, boolean>>((acc: Record<string, boolean>, student: StudentRecord) => {
+        acc[student.id] = false
+        return acc
+      }, {}),
+    })
+    setJoinMeetingId('')
+    addToast(`Joined meeting ${normalizedId}`, 'success')
+    addActivityNotification('Meeting Joined', `Joined meeting ${normalizedId}.`)
   }
 
   const handleContactStudent = (student: StudentRecord) => {
@@ -376,7 +588,7 @@ function App() {
 
   const handleQuickStartMeeting = () => {
     // Use the first section available (CSE Section A) for quick start
-    const defaultSection = academicRoot.departments[0]?.branches[0]?.sections[0]
+    const defaultSection = getFirstAvailableSection()
     if (defaultSection) {
       handleStartMeetingForSection(defaultSection)
     } else {
@@ -402,11 +614,16 @@ function App() {
           email: currentUser!.email,
           role: currentUser!.role,
         }}
+        attendanceMap={currentMeeting.attendanceMap}
+        onToggleAttendance={handleToggleAttendance}
         onEndMeeting={handleEndMeeting}
-        onInviteParticipants={() => addToast('Invite functionality will be implemented', 'info')}
+        onInviteParticipants={() => addToast('Invite panel opened', 'info')}
       />
     )
   }
+
+  const canJoinMeeting = joinMeetingId.trim().length > 0
+  const recentMeetingPreview = meetingHistory.slice(0, 3)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -438,6 +655,20 @@ function App() {
               <FacultyStudentDashboard 
                 role={currentUser?.role === 'faculty' ? 'faculty' : 'student'} 
                 onQuickStartMeeting={handleQuickStartMeeting}
+                onNavigate={(nav) => setSelectedNav(nav as AcademicNavItem)}
+              />
+            )}
+
+            {selectedNav === 'academic-structure' && (
+              <AcademicStructure
+                facultyRoot={academicRoot}
+                facultyProfile={currentUser?.facultyProfile}
+                role={currentUser?.role === 'faculty' ? 'faculty' : 'student'}
+                onStartMeetingForSection={handleStartMeetingForSection}
+                onInviteStudentToMeeting={(student: StudentRecord) => addToast(`Invited ${student.name} to a meeting.`, 'success')}
+                onSendMessageToStudent={(student: StudentRecord) => addToast(`Message sent to ${student.name}.`, 'success')}
+                onViewStudentProfile={(student: StudentRecord) => addToast(`Viewing profile: ${student.name} (${student.id})`, 'info')}
+                onAcademicRootChange={(updatedDepts) => setAcademicRoot((prev) => ({ ...prev, departments: updatedDepts }))}
               />
             )}
 
@@ -445,9 +676,46 @@ function App() {
               <div className="glass rounded-2xl border border-white/10 p-6 text-slate-200">
                 <div className="text-white text-xl font-semibold mb-4">Meetings & Video Calls</div>
                 <div className="space-y-4">
+                  <CalendarIntegration
+                    meetings={scheduledMeetings}
+                    onSchedule={handleScheduleMeeting}
+                    onEdit={() => {}}
+                    onDelete={handleDeleteScheduledMeeting}
+                    onToast={addToast}
+                  />
+
                   <div className="text-slate-400 text-sm">
                     Start a meeting by clicking the video icon next to any section in the Academic Structure.
                   </div>
+
+                  {currentUser?.role === 'student' && (
+                    <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <h3 className="text-cyan-300 font-medium">Join Meeting</h3>
+                          <p className="text-xs text-cyan-100/70 mt-1">Use a meeting ID from a faculty invite, QR code, or shared follow-up message.</p>
+                        </div>
+                        <div className="hidden sm:inline-flex items-center rounded-full bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200 border border-cyan-500/20">
+                          Student entry
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          value={joinMeetingId}
+                          onChange={(e) => setJoinMeetingId(e.target.value)}
+                          placeholder="Enter Meeting ID"
+                          className="flex-1 px-4 py-2 rounded-lg bg-slate-800/70 border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                        />
+                        <button
+                          onClick={handleJoinMeeting}
+                          disabled={!canJoinMeeting}
+                          className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 disabled:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg transition-colors text-cyan-200 font-medium"
+                        >
+                          Join Meeting
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   
                   {currentUser?.role === 'faculty' && (
                     <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
@@ -456,7 +724,7 @@ function App() {
                         <button 
                           onClick={() => {
                             // Find first section to demo
-                            const firstSection = academicRoot.departments[0]?.branches[0]?.sections[0]
+                            const firstSection = getFirstAvailableSection()
                             if (firstSection) {
                               handleStartMeetingForSection(firstSection)
                             }
@@ -475,9 +743,36 @@ function App() {
                     </div>
                   )}
                   
-                  <div className="bg-slate-800/50 rounded-lg p-4">
-                    <h3 className="text-slate-200 font-medium mb-2">Recent Meetings</h3>
-                    <div className="text-slate-400 text-sm">No recent meetings found.</div>
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-white/10">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div>
+                        <h3 className="text-slate-200 font-medium">Recent Meetings</h3>
+                        <p className="text-xs text-slate-500 mt-1">Quick access to your latest sessions and recordings.</p>
+                      </div>
+                      <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-slate-400">
+                        <CalendarDays className="w-3.5 h-3.5" />
+                        Live activity
+                      </div>
+                    </div>
+
+                    {recentMeetingPreview.length === 0 ? (
+                      <EmptyState
+                        message="No recent meetings yet"
+                        subMessage="Start or join a meeting and your latest session history will appear here for quick return access."
+                        action={currentUser?.role === 'faculty'
+                          ? { label: 'Start Quick Meeting', onClick: handleQuickStartMeeting }
+                          : undefined}
+                      />
+                    ) : (
+                      <div className="space-y-2">
+                        {recentMeetingPreview.map((meeting) => (
+                          <div key={meeting.id} className="rounded-xl border border-white/10 bg-slate-900/35 px-4 py-3">
+                            <div className="text-sm font-medium text-white">{meeting.title}</div>
+                            <div className="text-xs text-slate-400 mt-1">{meeting.duration} min · {meeting.participants.length} participants</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -486,39 +781,31 @@ function App() {
             {selectedNav === 'recordings' && (
               <div className="glass rounded-2xl border border-white/10 p-6 text-slate-200">
                 <div className="text-white text-xl font-semibold">Recordings</div>
-                <div className="text-slate-400 text-sm mt-1">Meeting recordings and summaries will appear here.</div>
+                <div className="text-slate-400 text-sm mt-1 mb-6">Meeting recordings and summaries appear below.</div>
+                {meetingHistory.length === 0 ? (
+                  <EmptyStateContainer>
+                    <NoMeetingHistoryEmptyState />
+                  </EmptyStateContainer>
+                ) : (
+                  <MeetingHistory meetings={meetingHistory} onPlayRecording={handlePlayRecording} />
+                )}
               </div>
             )}
 
             {selectedNav === 'settings' && (
-              <div className="glass rounded-2xl border border-white/10 p-6 text-slate-200">
-                <div className="text-white text-xl font-semibold">Settings</div>
-                <div className="text-slate-400 text-sm mt-1">Application settings and preferences.</div>
-                <div className="mt-6 space-y-4">
-                  <div className="bg-slate-800/50 rounded-lg p-4">
-                    <h3 className="text-slate-200 font-medium mb-2">User Profile</h3>
-                    <div className="text-sm text-slate-300">
-                      <p>Name: {currentUser?.name}</p>
-                      <p>Email: {currentUser?.email}</p>
-                      <p>Role: {currentUser?.role}</p>
-                      {currentUser?.facultyProfile && (
-                        <>
-                          <p>Department: {currentUser.facultyProfile.department}</p>
-                          <p>Designation: {currentUser.facultyProfile.designation}</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
+              <div>
+                <div className="flex justify-end mb-4">
                   <button
                     onClick={() => {
                       setIsAuthenticated(false)
                       setCurrentUser(null)
                     }}
-                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors"
+                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors font-medium"
                   >
                     Logout
                   </button>
                 </div>
+                <SettingsPage onBack={() => setSelectedNav('dashboard')} />
               </div>
             )}
           </div>
@@ -531,6 +818,20 @@ function App() {
         ))}
       </div>
 
+      <div className="fixed top-4 right-6 z-50 flex items-center gap-3">
+        <NotificationBell
+          unreadCount={activityNotifications.length}
+          onBellClick={() => setShowNotificationPanel(true)}
+        />
+      </div>
+
+      <NotificationPanel
+        isOpen={showNotificationPanel}
+        notifications={activityNotifications}
+        onClose={() => setShowNotificationPanel(false)}
+        onClear={() => setActivityNotifications([])}
+      />
+
       {/* Student Selection Modal */}
       {showStudentSelection && selectedSection && (
         <StudentSelectionModal
@@ -542,6 +843,76 @@ function App() {
           section={selectedSection}
           onStartMeeting={handleStudentSelectionComplete}
         />
+      )}
+
+      {postMeetingRecord && (
+        <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl glass rounded-2xl border border-white/10 p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-white">Meeting Follow-up</h3>
+                <p className="text-slate-400 text-sm mt-1">Review absentees and send recording/summary.</p>
+              </div>
+              <button
+                onClick={() => setPostMeetingRecord(null)}
+                className="px-3 py-1 rounded-lg bg-slate-700/70 hover:bg-slate-700 text-slate-200 text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="bg-slate-800/40 border border-white/10 rounded-lg p-4 mb-4">
+              <div className="text-sm text-slate-300 mb-2">
+                Absentees ({postMeetingRecord.absentMembers?.length || 0})
+              </div>
+              {postMeetingRecord.absentMembers && postMeetingRecord.absentMembers.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {postMeetingRecord.absentMembers.map((member) => (
+                    <span key={member} className="px-2 py-1 rounded-md bg-rose-500/20 border border-rose-500/30 text-rose-200 text-xs">
+                      {member}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-emerald-300 text-sm">Everyone attended this meeting.</div>
+              )}
+            </div>
+
+            <div className="space-y-2 mb-5">
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={shareOptions.includeRecording}
+                  onChange={(e) => setShareOptions((prev) => ({ ...prev, includeRecording: e.target.checked }))}
+                />
+                Include recording link
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={shareOptions.includeSummary}
+                  onChange={(e) => setShareOptions((prev) => ({ ...prev, includeSummary: e.target.checked }))}
+                />
+                Include meeting summary
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => handleSendMeetingPackage('absent')}
+                className="flex-1 px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30"
+              >
+                Send to Absentees
+              </button>
+              <button
+                onClick={() => handleSendMeetingPackage('all')}
+                className="flex-1 px-4 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border border-blue-500/30"
+              >
+                Send to All Students
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

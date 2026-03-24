@@ -111,7 +111,7 @@ export default function LoginPage({ onLogin, onRegisterFaculty }: LoginPageProps
   }
 
   return (
-    <div className="w-full h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center relative overflow-hidden p-4">
+    <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-start md:items-center justify-center relative overflow-x-hidden overflow-y-auto p-4 md:py-8">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <motion.div

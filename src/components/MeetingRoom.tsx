@@ -10,7 +10,6 @@ import {
   Settings,
   Share2,
   Circle,
-  Grid,
   Monitor,
   MoreHorizontal,
   Maximize,
@@ -21,7 +20,20 @@ import {
   Hand,
   Camera,
   Clock,
+  Pencil,
+  Film,
+  Layers,
+  LayoutGrid,
+  Bell,
 } from 'lucide-react'
+import Whiteboard from './Whiteboard'
+import BreakoutRooms from './BreakoutRooms'
+import ScreenRecording from './ScreenRecording'
+import VirtualBackgrounds from './VirtualBackgrounds'
+import Toast from './Toast'
+import FloatingReactions from './FloatingReactions'
+import MeetingInvite from './MeetingInvite'
+import WaitingRoom, { type WaitingParticipant } from './WaitingRoom'
 
 interface MeetingParticipant {
   id: string
@@ -45,6 +57,7 @@ interface MeetingRoomProps {
   meetingTitle: string
   participants?: MeetingParticipant[]
   selectedStudents: SelectedStudent[]
+  attendanceMap?: Record<string, boolean>
   currentUser: {
     id: string
     name: string
@@ -53,6 +66,7 @@ interface MeetingRoomProps {
   }
   onEndMeeting: () => void
   onInviteParticipants?: () => void
+  onToggleAttendance?: (studentId: string) => void
 }
 
 export default function MeetingRoom({
@@ -60,13 +74,16 @@ export default function MeetingRoom({
   meetingTitle,
   participants = [],
   selectedStudents = [],
+  attendanceMap = {},
   currentUser,
   onEndMeeting,
+  onInviteParticipants,
+  onToggleAttendance,
 }: MeetingRoomProps) {
   const [isVideoOn, setIsVideoOn] = useState(true)
   const [isMuted, setIsMuted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'speaker'>('grid')
+  const [viewMode] = useState<'grid' | 'speaker'>('grid')
   const [showParticipants, setShowParticipants] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -95,6 +112,28 @@ export default function MeetingRoom({
   const [newMessage, setNewMessage] = useState('')
   
   const videoRef = useRef<HTMLVideoElement>(null)
+  const screenShareStreamRef = useRef<MediaStream | null>(null)
+  const [showToolPanel, setShowToolPanel] = useState<'whiteboard' | 'breakoutRooms' | 'screenRecording' | 'virtualBg' | 'waitingRoom' | null>(null)
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'info' | 'success' | 'warning' | 'error' }>>([])
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [floatingReactions, setFloatingReactions] = useState<Array<{
+    id: string
+    emoji: string
+    x: number
+    y: number
+    variant?: 'burst' | 'spiral' | 'float' | 'bounce'
+  }>>([])
+  const [waitingParticipants, setWaitingParticipants] = useState<WaitingParticipant[]>(() =>
+    currentUser.role === 'faculty'
+      ? selectedStudents.slice(0, Math.min(2, selectedStudents.length)).map((student, index) => ({
+          id: `waiting-${student.id}`,
+          name: student.name,
+          email: student.email,
+          avatar: student.name.charAt(0).toUpperCase(),
+          joinedAt: new Date(Date.now() - (index + 1) * 60000),
+        }))
+      : [],
+  )
 
   // Initialize camera and microphone
   useEffect(() => {
@@ -132,6 +171,34 @@ export default function MeetingRoom({
     return () => clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    const handleReactionEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        id?: string
+        emoji: string
+        x?: number
+        y?: number
+        variant?: 'burst' | 'spiral' | 'float' | 'bounce'
+      }>
+
+      const reaction = {
+        id: customEvent.detail?.id || `reaction-${Date.now()}-${Math.random()}`,
+        emoji: customEvent.detail?.emoji || '👏',
+        x: customEvent.detail?.x ?? 50,
+        y: customEvent.detail?.y ?? 100,
+        variant: customEvent.detail?.variant || 'float',
+      }
+
+      setFloatingReactions((prev) => [...prev, reaction])
+      setTimeout(() => {
+        setFloatingReactions((prev) => prev.filter((item) => item.id !== reaction.id))
+      }, 3600)
+    }
+
+    window.addEventListener('reactionSent', handleReactionEvent)
+    return () => window.removeEventListener('reactionSent', handleReactionEvent)
+  }, [])
+
   // Format meeting duration
   const formatDuration = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600)
@@ -164,6 +231,57 @@ export default function MeetingRoom({
     setSpeakingQueue([])
   }
 
+  const addToast = (message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+    const id = `toast-${Date.now()}-${Math.random()}`
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3200)
+  }
+
+  const toggleToolPanel = (panel: 'whiteboard' | 'breakoutRooms' | 'screenRecording' | 'virtualBg' | 'waitingRoom') => {
+    setShowToolPanel(prev => prev === panel ? null : panel)
+    setShowParticipants(false)
+    setShowChat(false)
+    setShowSpeakingQueue(false)
+  }
+
+  const admitParticipant = (participantId: string) => {
+    setWaitingParticipants((prev) => prev.filter((participant) => participant.id !== participantId))
+    addToast('Participant admitted to the meeting', 'success')
+  }
+
+  const rejectParticipant = (participantId: string) => {
+    setWaitingParticipants((prev) => prev.filter((participant) => participant.id !== participantId))
+    addToast('Participant removed from waiting room', 'warning')
+  }
+
+  const admitAllParticipants = () => {
+    if (waitingParticipants.length === 0) return
+    setWaitingParticipants([])
+    addToast('All waiting participants admitted', 'success')
+  }
+
+  const toggleScreenShare = async () => {
+    if (!isScreenSharing) {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+        screenShareStreamRef.current = stream
+        stream.getVideoTracks()[0].onended = () => {
+          setIsScreenSharing(false)
+          screenShareStreamRef.current = null
+        }
+        setIsScreenSharing(true)
+        addToast('Screen sharing started', 'success')
+      } catch {
+        addToast('Could not start screen sharing', 'error')
+      }
+    } else {
+      screenShareStreamRef.current?.getTracks().forEach(t => t.stop())
+      screenShareStreamRef.current = null
+      setIsScreenSharing(false)
+      addToast('Screen sharing stopped', 'info')
+    }
+  }
+
   // Handle video toggle
   const toggleVideo = () => {
     if (localStream) {
@@ -185,6 +303,8 @@ export default function MeetingRoom({
       }
     }
   }
+
+  const selectedStudentIds = new Set(selectedStudents.map((student) => student.id))
 
   // Create participants including current user and selected students
   const allParticipants: MeetingParticipant[] = [
@@ -263,24 +383,21 @@ export default function MeetingRoom({
         <div className="flex items-center gap-2">
           {/* Meeting Controls */}
           <button
-            onClick={() => navigator.clipboard.writeText(`Meeting ID: ${meetingId}\nJoin: ${window.location.href}`)}
+            onClick={() => {
+              setShowInviteModal(true)
+              onInviteParticipants?.()
+            }}
             className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-400/30 rounded-lg text-blue-300 text-sm font-medium transition-colors"
-            title="Copy meeting info"
+            title="Invite participants"
           >
             <Copy className="w-4 h-4" />
             Invite
           </button>
           
-          <button
-            onClick={() => setViewMode(viewMode === 'grid' ? 'speaker' : 'grid')}
-            className="p-2 hover:bg-white/10 rounded-lg text-slate-300 hover:text-white transition-colors"
-            title={viewMode === 'grid' ? 'Speaker View' : 'Grid View'}
-          >
-            {viewMode === 'grid' ? <Monitor className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-          </button>
+
           
           <button
-            onClick={() => setShowParticipants(!showParticipants)}
+            onClick={() => { setShowParticipants(!showParticipants); setShowToolPanel(null); }}
             className={`relative p-2 rounded-lg transition-colors ${
               showParticipants 
                 ? 'bg-blue-500/20 text-blue-300 border border-blue-400/30' 
@@ -295,7 +412,7 @@ export default function MeetingRoom({
           </button>
           
           <button
-            onClick={() => setShowChat(!showChat)}
+            onClick={() => { setShowChat(!showChat); setShowToolPanel(null); }}
             className={`relative p-2 rounded-lg transition-colors ${
               showChat 
                 ? 'bg-green-500/20 text-green-300 border border-green-400/30' 
@@ -310,7 +427,70 @@ export default function MeetingRoom({
               </span>
             )}
           </button>
-          
+
+          {/* Tool Panel Buttons */}
+          <button
+            onClick={() => toggleToolPanel('whiteboard')}
+            className={`p-2 rounded-lg transition-colors ${
+              showToolPanel === 'whiteboard'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-400/30'
+                : 'hover:bg-white/10 text-slate-300 hover:text-white'
+            }`}
+            title="Whiteboard"
+          >
+            <Pencil className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={() => toggleToolPanel('breakoutRooms')}
+            className={`p-2 rounded-lg transition-colors ${
+              showToolPanel === 'breakoutRooms'
+                ? 'bg-orange-500/20 text-orange-300 border border-orange-400/30'
+                : 'hover:bg-white/10 text-slate-300 hover:text-white'
+            }`}
+            title="Breakout Rooms"
+          >
+            <LayoutGrid className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={() => toggleToolPanel('screenRecording')}
+            className={`p-2 rounded-lg transition-colors ${
+              showToolPanel === 'screenRecording'
+                ? 'bg-red-500/20 text-red-300 border border-red-400/30'
+                : 'hover:bg-white/10 text-slate-300 hover:text-white'
+            }`}
+            title="Recording Panel"
+          >
+            <Film className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={() => toggleToolPanel('virtualBg')}
+            className={`p-2 rounded-lg transition-colors ${
+              showToolPanel === 'virtualBg'
+                ? 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                : 'hover:bg-white/10 text-slate-300 hover:text-white'
+            }`}
+            title="Virtual Backgrounds"
+          >
+            <Layers className="w-5 h-5" />
+          </button>
+
+          {currentUser.role === 'faculty' && (
+            <button
+              onClick={() => toggleToolPanel('waitingRoom')}
+              className={`p-2 rounded-lg transition-colors ${
+                showToolPanel === 'waitingRoom'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30'
+                  : 'hover:bg-white/10 text-slate-300 hover:text-white'
+              }`}
+              title="Waiting Room"
+            >
+              <Bell className="w-5 h-5" />
+            </button>
+          )}
+
           <div className="relative">
             <button
               onClick={() => setShowSettings(!showSettings)}
@@ -330,7 +510,7 @@ export default function MeetingRoom({
                   {isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                 </button>
                 <button
-                  onClick={() => setIsScreenSharing(!isScreenSharing)}
+                  onClick={toggleScreenShare}
                   className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg text-sm text-slate-300 hover:text-white transition-colors"
                 >
                   <Share2 className="w-4 h-4" />
@@ -497,7 +677,7 @@ export default function MeetingRoom({
         </div>
 
         {/* Enhanced Side Panel */}
-        {(showParticipants || showChat || (currentUser.role === 'faculty' && showSpeakingQueue)) && (
+        {(showParticipants || showChat || (currentUser.role === 'faculty' && showSpeakingQueue) || showToolPanel !== null) && (
           <div className="w-80 bg-slate-900/90 backdrop-blur-sm border-l border-white/10 flex flex-col">
             {/* Tab Headers */}
             <div className="flex border-b border-white/10">
@@ -538,6 +718,17 @@ export default function MeetingRoom({
                   <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs text-black font-bold animate-pulse">
                     {speakingQueue.length}
                   </div>
+                </button>
+              )}
+              {showToolPanel !== null && !showParticipants && !showChat && (
+                <button
+                  className="flex-1 p-3 text-sm font-medium text-white border-b-2 border-indigo-400 bg-indigo-500/10 flex items-center justify-center gap-2"
+                >
+                  {showToolPanel === 'whiteboard' && <><Pencil className="w-4 h-4" /> Whiteboard</>}
+                  {showToolPanel === 'breakoutRooms' && <><LayoutGrid className="w-4 h-4" /> Breakout Rooms</>}
+                  {showToolPanel === 'screenRecording' && <><Film className="w-4 h-4" /> Recording</>}
+                  {showToolPanel === 'virtualBg' && <><Layers className="w-4 h-4" /> Virtual BG</>}
+                  {showToolPanel === 'waitingRoom' && <><Bell className="w-4 h-4" /> Waiting Room</>}
                 </button>
               )}
             </div>
@@ -615,6 +806,8 @@ export default function MeetingRoom({
                     .map((participant) => {
                       const queuePosition = speakingQueue.indexOf(participant.id)
                       const isInQueue = queuePosition !== -1
+                      const isStudentParticipant = selectedStudentIds.has(participant.id)
+                      const isMarkedAttended = attendanceMap[participant.id] || false
                       
                       return (
                       <div 
@@ -686,12 +879,30 @@ export default function MeetingRoom({
                           
                           {/* More options for host */}
                           {currentUser.role === 'faculty' && participant.id !== currentUser.id && (
-                            <button 
-                              className="p-1 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-all"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreHorizontal className="w-3 h-3" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              {isStudentParticipant && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onToggleAttendance?.(participant.id)
+                                  }}
+                                  className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all ${
+                                    isMarkedAttended
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                                      : 'bg-rose-500/20 text-rose-300 border-rose-400/30'
+                                  }`}
+                                  title={isMarkedAttended ? 'Marked attended - click to mark absent' : 'Marked absent - click to mark attended'}
+                                >
+                                  {isMarkedAttended ? 'Attended' : 'Absent'}
+                                </button>
+                              )}
+                              <button 
+                                className="p-1 opacity-0 group-hover:opacity-100 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-all"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="w-3 h-3" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -761,6 +972,45 @@ export default function MeetingRoom({
                 </div>
               </div>
             )}
+
+            {/* Tool Panels */}
+            {showToolPanel === 'whiteboard' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <Whiteboard onToast={addToast} />
+              </div>
+            )}
+
+            {showToolPanel === 'breakoutRooms' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <BreakoutRooms
+                  mainParticipants={allParticipants.map(p => p.name)}
+                  onToast={addToast}
+                />
+              </div>
+            )}
+
+            {showToolPanel === 'screenRecording' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <ScreenRecording videoStream={localStream} onToast={addToast} />
+              </div>
+            )}
+
+            {showToolPanel === 'virtualBg' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <VirtualBackgrounds videoRef={videoRef} onToast={addToast} />
+              </div>
+            )}
+
+            {showToolPanel === 'waitingRoom' && currentUser.role === 'faculty' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <WaitingRoom
+                  waitingParticipants={waitingParticipants}
+                  onAdmit={admitParticipant}
+                  onReject={rejectParticipant}
+                  onAdmitAll={admitAllParticipants}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -770,23 +1020,12 @@ export default function MeetingRoom({
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           {/* Left Side - Meeting Info */}
           <div className="flex items-center gap-4 text-sm text-slate-400 min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span className="font-mono">{formatDuration(meetingDuration)}</span>
-            </div>
-            <div className="hidden md:flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              <span>{allParticipants.length} participant{allParticipants.length === 1 ? '' : 's'}</span>
-            </div>
             {speakingQueue.length > 0 && currentUser.role === 'faculty' && (
               <div className="flex items-center gap-2 text-yellow-400">
                 <Hand className="w-4 h-4" />
                 <span>{speakingQueue.length} waiting to speak</span>
               </div>
             )}
-            <div className="hidden lg:block">
-              Quality: HD • Bandwidth: Good
-            </div>
           </div>
 
           {/* Center - Main Controls */}
@@ -819,7 +1058,7 @@ export default function MeetingRoom({
             </button>
 
             <button
-              onClick={() => setIsScreenSharing(!isScreenSharing)}
+              onClick={toggleScreenShare}
               className={`p-4 rounded-full transition-all duration-200 ${
                 isScreenSharing
                   ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25'
@@ -931,6 +1170,23 @@ export default function MeetingRoom({
           </div>
         </div>
       </div>
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-20 right-6 z-50 space-y-2 pointer-events-none">
+        {toasts.map(toast => (
+          <Toast key={toast.id} message={toast.message} type={toast.type} />
+        ))}
+      </div>
+
+      <FloatingReactions reactions={floatingReactions} />
+
+      <MeetingInvite
+        isOpen={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        meetingId={meetingId}
+        meetingTitle={meetingTitle}
+        hostName={currentUser.name}
+      />
     </div>
   )
 }

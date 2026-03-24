@@ -23,7 +23,7 @@ export default function MeetingInvite({
   const [emailTo, setEmailTo] = useState('')
   const [smsTo, setSmsTo] = useState('')
 
-  const meetingLink = `https://meet.videocall.app/join/${meetingId}`
+  const meetingLink = `${window.location.origin}${window.location.pathname}#join/${encodeURIComponent(meetingId)}`
   const inviteMessage = `Join "${meetingTitle}" meeting\n\nHost: ${hostName}\nMeeting ID: ${meetingId}\nLink: ${meetingLink}\n\nClick the link to join instantly!`
 
   const copyToClipboard = async () => {

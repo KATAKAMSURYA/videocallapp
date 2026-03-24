@@ -36,7 +36,7 @@ const ControlButton = ({
   isActive = true,
   disabled = false,
 }: {
-  icon: React.ComponentType<any>
+  icon: React.ComponentType<{ className?: string }>
   onClick: () => void
   label: string
   variant?: 'default' | 'danger' | 'success'

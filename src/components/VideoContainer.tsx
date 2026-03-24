@@ -30,7 +30,7 @@ export default function VideoContainer({
     if (videoRef.current && videoStream && isCameraOn) {
       try {
         videoRef.current.srcObject = videoStream
-      } catch (err) {
+      } catch {
         setError('Failed to display video stream')
       }
     }
