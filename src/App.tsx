@@ -755,53 +755,6 @@ function App() {
       },
     ]
 
-  const studentTodayTimeline = [
-    ...scheduledMeetings
-      .filter((meeting) => meeting.date.toDateString() === now.toDateString())
-      .map((meeting) => ({
-        id: `class-${meeting.id}`,
-        timeLabel: meeting.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        title: meeting.title,
-        kind: 'class' as const,
-      })),
-    ...activityNotifications
-      .filter((notification) => notification.timestamp.toDateString() === now.toDateString())
-      .slice(0, 3)
-      .map((notification) => {
-        const normalized = `${notification.title} ${notification.message}`.toLowerCase()
-        const isDeadline = /deadline|due|assignment|exam|lab/.test(normalized)
-        return {
-          id: `notif-${notification.id}`,
-          timeLabel: notification.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          title: notification.title,
-          kind: isDeadline ? ('deadline' as const) : ('reminder' as const),
-        }
-      }),
-  ].sort((a, b) => a.timeLabel.localeCompare(b.timeLabel))
-
-  const studentReminderItems = activityNotifications.slice(0, 8).map((notification) => {
-    const normalized = `${notification.title} ${notification.message}`.toLowerCase()
-    const type: 'assignment' | 'lab' | 'exam' | 'reminder' = normalized.includes('assignment')
-      ? 'assignment'
-      : normalized.includes('lab')
-        ? 'lab'
-        : normalized.includes('exam')
-          ? 'exam'
-          : 'reminder'
-
-    const dueLabel = notification.timestamp.toDateString() === now.toDateString()
-      ? 'Due today'
-      : `Due ${notification.timestamp.toLocaleDateString()}`
-
-    return {
-      id: notification.id,
-      title: notification.title,
-      message: notification.message,
-      type,
-      dueLabel,
-    }
-  })
-
   const getResourceSubject = (title: string) => {
     const [prefix] = title.split('-')
     return prefix?.trim() || 'General'
@@ -827,10 +780,35 @@ function App() {
     requestId: string,
     status: 'Sent' | 'Accepted' | 'Rescheduled' | 'Completed',
   ) => {
-    setStudentDoubtRequests((prev) => prev.map((request) => (
-      request.id === requestId ? { ...request, status } : request
-    )))
-    addToast(`Doubt request status updated to ${status}.`, 'success')
+    let targetTopic = ''
+    let requester = ''
+
+    setStudentDoubtRequests((prev) => {
+      const found = prev.find((request) => request.id === requestId)
+      targetTopic = found?.topic || ''
+      requester = found?.requestedBy || ''
+      return prev.map((request) => (
+        request.id === requestId ? { ...request, status } : request
+      ))
+    })
+
+    const label = targetTopic || 'Doubt request'
+    const statusMessage = status === 'Accepted'
+      ? `${label} accepted.`
+      : status === 'Rescheduled'
+        ? `${label} marked for a new time.`
+        : `${label} updated to ${status}.`
+
+    addToast(statusMessage, 'success')
+    addActivityNotification('Doubt Request Updated', `${label} · ${status}${requester ? ` · ${requester}` : ''}`)
+
+    // Notify faculty when a student responds to a request
+    if (currentUser?.role === 'student' && (status === 'Accepted' || status === 'Rescheduled')) {
+      addActivityNotification(
+        'Student responded to request',
+        `${currentUser.name} ${status === 'Accepted' ? 'accepted' : 'requested changes for'} "${label}".`,
+      )
+    }
   }
 
   return (
@@ -894,10 +872,8 @@ function App() {
                   summaryText: meeting.summary || (meeting.keyPoints ? meeting.keyPoints.join(' · ') : undefined),
                   summaryUrl: typeof meeting.summary === 'string' && meeting.summary.startsWith('http') ? meeting.summary : undefined,
                 }))}
-                todayTimeline={studentTodayTimeline}
                 liveInvite={liveMeetingInvite || undefined}
                 onJoinLiveMeeting={handleJoinLiveInvite}
-                reminderItems={studentReminderItems}
                 doubtRequests={studentDoubtRequests.map((request) => ({
                   id: request.id,
                   topic: request.topic,
