@@ -1,6 +1,21 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Bell, Bookmark, Calendar, CheckCircle2, Clapperboard, Clock3, Download, GraduationCap, MessageSquare, TrendingUp, Video } from 'lucide-react'
+import { Bell, Bookmark, Calendar, Clapperboard, Clock3, Download, GraduationCap, MessageSquare, Video } from 'lucide-react'
+
+interface SharedResourceItem {
+  id: string
+  title: string
+  date: Date
+  hasRecording: boolean
+  hasSummary: boolean
+  subject?: string
+  recordingUrl?: string
+  downloadUrl?: string
+  fileSizeLabel?: string
+  slidesUrl?: string
+  summaryText?: string
+  summaryUrl?: string
+}
 
 interface FacultyStudentDashboardProps {
   role: 'faculty' | 'student'
@@ -9,10 +24,10 @@ interface FacultyStudentDashboardProps {
   upcomingMeetings?: Array<{ id: string; title: string; date: Date }>
   attendanceHistory?: Array<{ id: string; title: string; date: Date; status: 'Attended' | 'Absent' }>
   notifications?: Array<{ id: string; title: string; message: string }>
-  sharedResources?: Array<{ id: string; title: string; date: Date; hasRecording: boolean; hasSummary: boolean; subject?: string }>
+  sharedResources?: Array<SharedResourceItem>
   todayTimeline?: Array<{ id: string; timeLabel: string; title: string; kind: 'class' | 'deadline' | 'reminder' }>
-  attendanceWeeklyTrend?: Array<{ day: string; percentage: number }>
-  attendanceRiskThreshold?: number
+  liveInvite?: { id: string; title: string; sectionName: string; host: string; startedAt: Date }
+  onJoinLiveMeeting?: (meetingId: string) => void
   reminderItems?: Array<{ id: string; title: string; message: string; type: 'assignment' | 'lab' | 'exam' | 'reminder'; dueLabel: string }>
   doubtRequests?: Array<{ id: string; topic: string; preferredSlot: string; requestedBy?: string; status: 'Sent' | 'Accepted' | 'Rescheduled' | 'Completed'; requestedAtLabel: string }>
   onRequestDoubtSession?: (payload: { topic: string; message: string; preferredSlot: string }) => void
@@ -28,26 +43,28 @@ export default function FacultyStudentDashboard({
   notifications = [],
   sharedResources = [],
   todayTimeline = [],
-  attendanceWeeklyTrend = [],
-  attendanceRiskThreshold = 75,
+  liveInvite,
+  onJoinLiveMeeting,
   reminderItems = [],
   doubtRequests = [],
   onRequestDoubtSession,
   onUpdateDoubtRequestStatus,
 }: FacultyStudentDashboardProps) {
+
   const attendedCount = attendanceHistory.filter((item) => item.status === 'Attended').length
   const attendanceRate = attendanceHistory.length > 0
     ? Math.round((attendedCount / attendanceHistory.length) * 100)
     : 0
-  const isAtRisk = role === 'student' && attendanceRate < attendanceRiskThreshold
 
   const [selectedSubject, setSelectedSubject] = useState('All')
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'recording' | 'summary'>('all')
   const [savedResourceIds, setSavedResourceIds] = useState<Record<string, boolean>>({})
   const [doneReminderIds, setDoneReminderIds] = useState<Record<string, boolean>>({})
   const [snoozedReminderIds, setSnoozedReminderIds] = useState<Record<string, boolean>>({})
   const [doubtTopic, setDoubtTopic] = useState('')
   const [doubtMessage, setDoubtMessage] = useState('')
   const [preferredSlot, setPreferredSlot] = useState('')
+  const [lastPositions, setLastPositions] = useState<Record<string, number>>({})
 
   const subjectOptions = useMemo(() => {
     const values = new Set<string>()
@@ -56,9 +73,18 @@ export default function FacultyStudentDashboard({
   }, [sharedResources])
 
   const filteredResources = useMemo(() => {
-    if (selectedSubject === 'All') return sharedResources
-    return sharedResources.filter((resource) => (resource.subject || 'General') === selectedSubject)
-  }, [selectedSubject, sharedResources])
+    const filteredBySubject = selectedSubject === 'All'
+      ? sharedResources
+      : sharedResources.filter((resource) => (resource.subject || 'General') === selectedSubject)
+
+    const filteredByAvailability = filteredBySubject.filter((resource) => {
+      if (availabilityFilter === 'recording') return resource.hasRecording
+      if (availabilityFilter === 'summary') return resource.hasSummary
+      return true
+    })
+
+    return [...filteredByAvailability].sort((a, b) => b.date.getTime() - a.date.getTime())
+  }, [availabilityFilter, selectedSubject, sharedResources])
 
   const visibleReminders = reminderItems.filter((item) => !doneReminderIds[item.id] && !snoozedReminderIds[item.id])
 
@@ -122,6 +148,31 @@ export default function FacultyStudentDashboard({
           </motion.button>
         )}
       </div>
+
+      {role === 'student' && liveInvite && (
+        <div className="glass rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6 border border-emerald-400/30 bg-emerald-500/10">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-emerald-200">Live class in progress</p>
+            <h3 className="text-white font-semibold mt-1">{liveInvite.title}</h3>
+            <p className="text-slate-300 text-sm mt-1">{liveInvite.sectionName} · Host: {liveInvite.host}</p>
+            <p className="text-slate-400 text-xs">Started at {liveInvite.startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onJoinLiveMeeting?.(liveInvite.id)}
+              className="px-4 py-2 rounded-lg bg-emerald-500/80 hover:bg-emerald-500 text-white text-sm font-semibold"
+            >
+              Request to Join
+            </button>
+            <button
+              onClick={() => onNavigate?.('meetings')}
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 text-sm"
+            >
+              View Meetings
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-4">
@@ -243,59 +294,31 @@ export default function FacultyStudentDashboard({
           </div>
 
           <div className="glass rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-4 h-4 text-purple-300" />
-              <h3 className="text-white font-semibold">Attendance Insights</h3>
-            </div>
-
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-400">Weekly trend</p>
-              <p className="text-sm text-purple-200 font-medium">{attendanceRate}%</p>
-            </div>
-
-            {attendanceWeeklyTrend.length === 0 ? (
-              <p className="text-slate-500 text-sm">No attendance trend data yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {attendanceWeeklyTrend.map((point) => (
-                  <div key={point.day} className="flex items-center gap-2">
-                    <div className="w-10 text-[11px] text-slate-400">{point.day}</div>
-                    <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-                      <div className="h-full bg-purple-400/70" style={{ width: `${Math.max(0, Math.min(100, point.percentage))}%` }} />
-                    </div>
-                    <div className="w-10 text-right text-[11px] text-slate-300">{point.percentage}%</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className={`mt-4 rounded-lg border px-3 py-2 text-xs ${isAtRisk
-              ? 'border-rose-400/30 bg-rose-500/10 text-rose-200'
-              : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'}`}>
-              <div className="flex items-center gap-2">
-                {isAtRisk ? <AlertTriangle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                {isAtRisk
-                  ? `At risk: attendance below ${attendanceRiskThreshold}%.`
-                  : `On track: attendance is above ${attendanceRiskThreshold}%.`}
-              </div>
-            </div>
-          </div>
-
-          <div className="glass rounded-xl p-5">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-emerald-300" />
                 <h3 className="text-white font-semibold">Resources Hub</h3>
               </div>
-              <select
-                value={selectedSubject}
-                onChange={(event) => setSelectedSubject(event.target.value)}
-                className="text-xs rounded-md bg-slate-900/70 border border-white/10 px-2 py-1 text-slate-200 focus:outline-none"
-              >
-                {subjectOptions.map((subject) => (
-                  <option key={subject} value={subject}>{subject}</option>
-                ))}
-              </select>
+              <div className="flex gap-2">
+                <select
+                  value={selectedSubject}
+                  onChange={(event) => setSelectedSubject(event.target.value)}
+                  className="text-xs rounded-md bg-slate-900/70 border border-white/10 px-2 py-1 text-slate-200 focus:outline-none"
+                >
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </select>
+                <select
+                  value={availabilityFilter}
+                  onChange={(event) => setAvailabilityFilter(event.target.value as 'all' | 'recording' | 'summary')}
+                  className="text-xs rounded-md bg-slate-900/70 border border-white/10 px-2 py-1 text-slate-200 focus:outline-none"
+                >
+                  <option value="all">All</option>
+                  <option value="recording">Has recording</option>
+                  <option value="summary">Has summary</option>
+                </select>
+              </div>
             </div>
 
             {filteredResources.length === 0 ? (
@@ -304,16 +327,72 @@ export default function FacultyStudentDashboard({
               <div className="space-y-2 max-h-56 overflow-auto pr-1">
                 {filteredResources.slice(0, 10).map((resource) => {
                   const isSaved = Boolean(savedResourceIds[resource.id])
+                  const resumeSeconds = lastPositions[resource.id] || 0
+                  const formatSeconds = (seconds: number) => {
+                    const mins = Math.floor(seconds / 60)
+                    const secs = seconds % 60
+                    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+                  }
                   return (
                     <div key={resource.id} className="rounded-lg bg-slate-900/50 border border-white/10 px-3 py-2 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs text-white truncate">{resource.title}</p>
                         <p className="text-[11px] text-slate-500 mt-1">{resource.subject || 'General'} · {resource.date.toLocaleDateString()}</p>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          {resource.hasRecording ? 'Recording' : ''}
-                          {resource.hasRecording && resource.hasSummary ? ' · ' : ''}
-                          {resource.hasSummary ? 'Summary' : ''}
-                        </p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {resource.hasRecording && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-200 border border-blue-400/30">Recording</span>}
+                          {resource.hasSummary && <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-200 border border-purple-400/30">Summary</span>}
+                          {resource.slidesUrl && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-200 border border-emerald-400/30">Slides</span>}
+                        </div>
+                        {resource.summaryText && (
+                          <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{resource.summaryText}</p>
+                        )}
+                        {resource.hasRecording && (
+                          <p className="text-[11px] text-amber-200 mt-1">Resume at {formatSeconds(resumeSeconds)}</p>
+                        )}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {resource.hasRecording && (
+                            <>
+                              <button
+                                onClick={() => setLastPositions((prev) => ({ ...prev, [resource.id]: Math.min(resumeSeconds + 30, 3599) }))}
+                                className="text-[11px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-100"
+                              >
+                                Save +30s
+                              </button>
+                              <button
+                                className="text-[11px] px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-100"
+                                disabled={!resource.recordingUrl}
+                              >
+                                Stream
+                              </button>
+                              <button
+                                className="text-[11px] px-2 py-1 rounded bg-slate-700/60 hover:bg-slate-700 text-slate-100 disabled:opacity-50"
+                                disabled={!resource.downloadUrl}
+                              >
+                                Download{resource.fileSizeLabel ? ` (${resource.fileSizeLabel})` : ''}
+                              </button>
+                            </>
+                          )}
+                          {resource.summaryUrl && (
+                            <a
+                              className="text-[11px] px-2 py-1 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-100"
+                              href={resource.summaryUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Read summary
+                            </a>
+                          )}
+                          {resource.slidesUrl && (
+                            <a
+                              className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100"
+                              href={resource.slidesUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View slides
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <button
                         onClick={() => handleToggleBookmark(resource.id)}

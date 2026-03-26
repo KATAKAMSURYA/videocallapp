@@ -258,6 +258,7 @@ function App() {
   } | null>(null)
   const [meetingHistory, setMeetingHistory] = useState<MeetingRecord[]>([])
   const [scheduledMeetings, setScheduledMeetings] = useState<ScheduledMeeting[]>([])
+  const [liveMeetingInvite, setLiveMeetingInvite] = useState<{ id: string; title: string; sectionName: string; host: string; startedAt: Date } | null>(null)
   const [activityNotifications, setActivityNotifications] = useState<ActivityNotification[]>([])
   const [studentDoubtRequests, setStudentDoubtRequests] = useState<StudentDoubtRequest[]>([
     {
@@ -482,6 +483,14 @@ function App() {
     
     addToast(`Meeting started with ${selectedStudents.length} students from ${section.name}`, 'success')
     addActivityNotification('Meeting Started', `${meetingTitle} with ${selectedStudents.length} students.`)
+
+    setLiveMeetingInvite({
+      id: meetingId,
+      title: meetingTitle,
+      sectionName: section.name,
+      host: currentUser?.name || 'Host',
+      startedAt: new Date(),
+    })
   }
 
   const handleToggleAttendance = (studentId: string) => {
@@ -537,7 +546,15 @@ function App() {
       addActivityNotification('Meeting Ended', `${currentMeeting.title} ended (${durationMinutes} min).`)
       setCurrentMeeting(null)
       setSelectedNav('recordings')
+      setLiveMeetingInvite(null)
     }
+  }
+
+  const handleJoinLiveInvite = (meetingId: string) => {
+    const invite = liveMeetingInvite && liveMeetingInvite.id === meetingId ? liveMeetingInvite : null
+    if (!invite) return
+    addToast('Join request sent to host', 'info')
+    addActivityNotification('Join Request', `${currentUser?.name || 'Student'} wants to join ${invite.title}.`)
   }
 
   const handleSendMeetingPackage = (target: 'absent' | 'all') => {
@@ -694,9 +711,49 @@ function App() {
     .filter((item): item is { meeting: MeetingRecord; status: 'Attended' | 'Absent' } => item !== null)
     .slice(0, 6)
 
-  const studentSharedResources = meetingHistory
+  const studentSharedResourcesRaw = meetingHistory
     .filter((meeting) => Boolean(meeting.recording || meeting.summary))
     .slice(0, 8)
+
+  const studentSharedResources = studentSharedResourcesRaw.length > 0
+    ? studentSharedResourcesRaw
+    : [
+      {
+        id: 'demo-rec-1',
+        title: 'DSA - Recursion Patterns',
+        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        duration: 55,
+        participants: ['Aarav Patel', 'Priya Sharma'],
+        host: 'Prof. Anita Sharma',
+        recording: 'https://example.com/recordings/dsa-recursion.mp4',
+        summary: 'Covered recursion design, base cases, and recurrence tracing. Demoed backtracking on subsets.',
+        keyPoints: ['Base cases first', 'Prevent infinite recursion', 'Backtracking example'],
+      },
+      {
+        id: 'demo-rec-2',
+        title: 'Operating Systems - CPU Scheduling',
+        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        duration: 48,
+        participants: ['Amit Kumar', 'Kavya Nair'],
+        host: 'Dr. Vikram Singh',
+        recording: 'https://example.com/recordings/os-cpu-scheduling.mp4',
+        summary: 'FCFS vs SJF vs RR trade-offs; calculating waiting/turnaround times.',
+        keyPoints: ['FCFS', 'SJF', 'Round Robin', 'Gantt chart practice'],
+        autoSharedWithAbsent: true,
+      },
+      {
+        id: 'demo-rec-3',
+        title: 'Digital Electronics - Flip Flops',
+        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        duration: 42,
+        participants: ['Karan Mehta', 'Pooja Verma'],
+        host: 'Prof. Rajesh Kumar',
+        recording: 'https://example.com/recordings/digital-flipflops.mp4',
+        summary: 'SR, JK, D, T flip flops; setup/hold timing basics.',
+        keyPoints: ['SR latch', 'JK flip flop', 'Timing diagrams'],
+        absentMembers: ['Guest Student'],
+      },
+    ]
 
   const studentTodayTimeline = [
     ...scheduledMeetings
@@ -721,20 +778,6 @@ function App() {
         }
       }),
   ].sort((a, b) => a.timeLabel.localeCompare(b.timeLabel))
-
-  const studentAttendanceWeeklyTrend = Array.from({ length: 7 }, (_, index) => {
-    const dayDate = new Date(now)
-    dayDate.setDate(now.getDate() - (6 - index))
-
-    const entries = studentAttendanceHistory.filter(({ meeting }) => meeting.date.toDateString() === dayDate.toDateString())
-    const attendedOnDay = entries.filter((entry) => entry.status === 'Attended').length
-    const percentage = entries.length > 0 ? Math.round((attendedOnDay / entries.length) * 100) : 0
-
-    return {
-      day: dayDate.toLocaleDateString([], { weekday: 'short' }),
-      percentage,
-    }
-  })
 
   const studentReminderItems = activityNotifications.slice(0, 8).map((notification) => {
     const normalized = `${notification.title} ${notification.message}`.toLowerCase()
@@ -844,10 +887,16 @@ function App() {
                   hasRecording: Boolean(meeting.recording),
                   hasSummary: Boolean(meeting.summary || meeting.keyPoints?.length),
                   subject: getResourceSubject(meeting.title),
+                  recordingUrl: meeting.recording || undefined,
+                  downloadUrl: meeting.recording || undefined,
+                  fileSizeLabel: meeting.recording ? 'MP4' : undefined,
+                  slidesUrl: typeof meeting.summary === 'string' && meeting.summary.startsWith('http') ? meeting.summary : undefined,
+                  summaryText: meeting.summary || (meeting.keyPoints ? meeting.keyPoints.join(' · ') : undefined),
+                  summaryUrl: typeof meeting.summary === 'string' && meeting.summary.startsWith('http') ? meeting.summary : undefined,
                 }))}
                 todayTimeline={studentTodayTimeline}
-                attendanceWeeklyTrend={studentAttendanceWeeklyTrend}
-                attendanceRiskThreshold={75}
+                liveInvite={liveMeetingInvite || undefined}
+                onJoinLiveMeeting={handleJoinLiveInvite}
                 reminderItems={studentReminderItems}
                 doubtRequests={studentDoubtRequests.map((request) => ({
                   id: request.id,
