@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import LoginPage, { type FacultyRegistrationDetails } from './components/LoginPage'
 import type { UserRole } from './components/LoginPage'
 import Toast from './components/Toast'
@@ -7,7 +7,7 @@ import CalendarIntegration, { type ScheduledMeeting } from './components/Calenda
 import MeetingHistory, { type MeetingRecord } from './components/MeetingHistory'
 import { NotificationBell, NotificationPanel } from './components/NotificationsSystem'
 import { EmptyState, EmptyStateContainer, NoMeetingHistoryEmptyState } from './components/EmptyStates'
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays, Download, FileText } from 'lucide-react'
 import HierarchicalSidebar, { 
   type AcademicNavItem,
   type AcademicFacultyRoot,
@@ -31,6 +31,15 @@ interface ActivityNotification {
   title: string
   message: string
   timestamp: Date
+}
+
+interface StudentDoubtRequest {
+  id: string
+  topic: string
+  preferredSlot: string
+  requestedBy: string
+  status: 'Sent' | 'Accepted' | 'Rescheduled' | 'Completed'
+  createdAt: Date
 }
 
 interface UserProfile {
@@ -231,11 +240,6 @@ const initialAcademicRoot: AcademicFacultyRoot = {
 }
 
 function App() {
-  const initialJoinMeetingId = (() => {
-    const rawHash = window.location.hash.replace(/^#/, '')
-    return rawHash.startsWith('join/') ? decodeURIComponent(rawHash.slice('join/'.length)).trim() : ''
-  })()
-
   const [academicRoot, setAcademicRoot] = useState<AcademicFacultyRoot>(initialAcademicRoot)
 
   // ==================== AUTHENTICATION ====================
@@ -254,8 +258,41 @@ function App() {
   } | null>(null)
   const [meetingHistory, setMeetingHistory] = useState<MeetingRecord[]>([])
   const [scheduledMeetings, setScheduledMeetings] = useState<ScheduledMeeting[]>([])
-  const [joinMeetingId, setJoinMeetingId] = useState(initialJoinMeetingId)
   const [activityNotifications, setActivityNotifications] = useState<ActivityNotification[]>([])
+  const [studentDoubtRequests, setStudentDoubtRequests] = useState<StudentDoubtRequest[]>([
+    {
+      id: 'dr-1',
+      topic: 'Data Structures',
+      preferredSlot: 'Today 5:30 PM',
+      requestedBy: 'Aarav Patel',
+      status: 'Sent',
+      createdAt: new Date(Date.now() - 1000 * 60 * 90),
+    },
+    {
+      id: 'dr-2',
+      topic: 'Operating Systems',
+      preferredSlot: 'Tomorrow 10:00 AM',
+      requestedBy: 'Priya Sharma',
+      status: 'Accepted',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
+    },
+    {
+      id: 'dr-3',
+      topic: 'DBMS Lab',
+      preferredSlot: 'Friday 2:00 PM',
+      requestedBy: 'Rahul Gupta',
+      status: 'Rescheduled',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 40),
+    },
+    {
+      id: 'dr-4',
+      topic: 'Computer Networks',
+      preferredSlot: 'Completed session',
+      requestedBy: 'Sneha Reddy',
+      status: 'Completed',
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72),
+    },
+  ])
   const [showNotificationPanel, setShowNotificationPanel] = useState(false)
   
   const [showStudentSelection, setShowStudentSelection] = useState(false)
@@ -360,7 +397,19 @@ function App() {
 
   // ==================== NAV / LAYOUT ====================
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [selectedNav, setSelectedNav] = useState<AcademicNavItem>(initialJoinMeetingId ? 'meetings' : 'dashboard')
+  const [selectedNav, setSelectedNav] = useState<AcademicNavItem>('dashboard')
+
+  useEffect(() => {
+    if (currentUser?.role === 'student' && selectedNav === 'academic-structure') {
+      setSelectedNav('dashboard')
+    }
+  }, [currentUser?.role, selectedNav])
+
+  useEffect(() => {
+    if (currentUser?.role === 'student' && selectedNav === 'meetings') {
+      setSelectedNav('dashboard')
+    }
+  }, [currentUser?.role, selectedNav])
 
   // ==================== TOASTS ====================
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -552,33 +601,26 @@ function App() {
     addToast('Opening recording in a new tab.', 'info')
   }
 
-  const handleJoinMeeting = () => {
-    const normalizedId = joinMeetingId.trim()
-    if (!normalizedId) {
-      addToast('Please enter a meeting ID', 'warning')
-      return
-    }
+  const handleDownloadSummary = (meeting: MeetingRecord) => {
+    const summaryText = [
+      `Meeting: ${meeting.title}`,
+      `Date: ${meeting.date.toLocaleString()}`,
+      `Host: ${meeting.host}`,
+      `Duration: ${meeting.duration} minutes`,
+      '',
+      meeting.summary || 'No summary available.',
+      '',
+      ...(meeting.keyPoints?.length ? ['Key Points:', ...meeting.keyPoints.map((point) => `- ${point}`)] : []),
+    ].join('\n')
 
-    const defaultSection = getFirstAvailableSection()
-    if (!defaultSection) {
-      addToast('No section data found to join meeting', 'error')
-      return
-    }
-
-    setCurrentMeeting({
-      id: normalizedId,
-      title: `Joined Meeting - ${normalizedId}`,
-      section: defaultSection,
-      selectedStudents: defaultSection.students.slice(0, 4),
-      startedAt: new Date(),
-      attendanceMap: defaultSection.students.slice(0, 4).reduce<Record<string, boolean>>((acc: Record<string, boolean>, student: StudentRecord) => {
-        acc[student.id] = false
-        return acc
-      }, {}),
-    })
-    setJoinMeetingId('')
-    addToast(`Joined meeting ${normalizedId}`, 'success')
-    addActivityNotification('Meeting Joined', `Joined meeting ${normalizedId}.`)
+    const blob = new Blob([summaryText], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${meeting.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_summary.txt`
+    link.click()
+    URL.revokeObjectURL(url)
+    addToast('Summary downloaded', 'success')
   }
 
   const handleContactStudent = (student: StudentRecord) => {
@@ -594,6 +636,13 @@ function App() {
     } else {
       addToast('No sections available to start a meeting', 'warning')
     }
+  }
+
+  const handleLogout = () => {
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+    setSelectedNav('dashboard')
+    setShowNotificationPanel(false)
   }
 
   if (!isAuthenticated) {
@@ -622,8 +671,124 @@ function App() {
     )
   }
 
-  const canJoinMeeting = joinMeetingId.trim().length > 0
   const recentMeetingPreview = meetingHistory.slice(0, 3)
+  const now = new Date()
+  const studentUpcomingMeetings = scheduledMeetings
+    .filter((meeting) => meeting.date > now)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, 5)
+
+  const studentAttendanceHistory = meetingHistory
+    .map((meeting) => {
+      const reportStatus = meeting.attendanceReport?.find((entry) => entry.name === currentUser?.name)?.status
+      if (reportStatus) {
+        return { meeting, status: reportStatus }
+      }
+
+      if (meeting.participants.includes(currentUser?.name || '')) {
+        return { meeting, status: 'Attended' as const }
+      }
+
+      return null
+    })
+    .filter((item): item is { meeting: MeetingRecord; status: 'Attended' | 'Absent' } => item !== null)
+    .slice(0, 6)
+
+  const studentSharedResources = meetingHistory
+    .filter((meeting) => Boolean(meeting.recording || meeting.summary))
+    .slice(0, 8)
+
+  const studentTodayTimeline = [
+    ...scheduledMeetings
+      .filter((meeting) => meeting.date.toDateString() === now.toDateString())
+      .map((meeting) => ({
+        id: `class-${meeting.id}`,
+        timeLabel: meeting.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        title: meeting.title,
+        kind: 'class' as const,
+      })),
+    ...activityNotifications
+      .filter((notification) => notification.timestamp.toDateString() === now.toDateString())
+      .slice(0, 3)
+      .map((notification) => {
+        const normalized = `${notification.title} ${notification.message}`.toLowerCase()
+        const isDeadline = /deadline|due|assignment|exam|lab/.test(normalized)
+        return {
+          id: `notif-${notification.id}`,
+          timeLabel: notification.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          title: notification.title,
+          kind: isDeadline ? ('deadline' as const) : ('reminder' as const),
+        }
+      }),
+  ].sort((a, b) => a.timeLabel.localeCompare(b.timeLabel))
+
+  const studentAttendanceWeeklyTrend = Array.from({ length: 7 }, (_, index) => {
+    const dayDate = new Date(now)
+    dayDate.setDate(now.getDate() - (6 - index))
+
+    const entries = studentAttendanceHistory.filter(({ meeting }) => meeting.date.toDateString() === dayDate.toDateString())
+    const attendedOnDay = entries.filter((entry) => entry.status === 'Attended').length
+    const percentage = entries.length > 0 ? Math.round((attendedOnDay / entries.length) * 100) : 0
+
+    return {
+      day: dayDate.toLocaleDateString([], { weekday: 'short' }),
+      percentage,
+    }
+  })
+
+  const studentReminderItems = activityNotifications.slice(0, 8).map((notification) => {
+    const normalized = `${notification.title} ${notification.message}`.toLowerCase()
+    const type: 'assignment' | 'lab' | 'exam' | 'reminder' = normalized.includes('assignment')
+      ? 'assignment'
+      : normalized.includes('lab')
+        ? 'lab'
+        : normalized.includes('exam')
+          ? 'exam'
+          : 'reminder'
+
+    const dueLabel = notification.timestamp.toDateString() === now.toDateString()
+      ? 'Due today'
+      : `Due ${notification.timestamp.toLocaleDateString()}`
+
+    return {
+      id: notification.id,
+      title: notification.title,
+      message: notification.message,
+      type,
+      dueLabel,
+    }
+  })
+
+  const getResourceSubject = (title: string) => {
+    const [prefix] = title.split('-')
+    return prefix?.trim() || 'General'
+  }
+
+  const handleRequestDoubtSession = (payload: { topic: string; message: string; preferredSlot: string }) => {
+    setStudentDoubtRequests((prev) => [
+      {
+        id: `dr-${Date.now()}`,
+        topic: payload.topic,
+        preferredSlot: payload.preferredSlot,
+        requestedBy: currentUser?.name || 'Student',
+        status: 'Sent',
+        createdAt: new Date(),
+      },
+      ...prev,
+    ])
+    addToast('Doubt session request sent to faculty.', 'success')
+    addActivityNotification('Doubt Session Requested', `${payload.topic} · ${payload.preferredSlot}`)
+  }
+
+  const handleUpdateDoubtRequestStatus = (
+    requestId: string,
+    status: 'Sent' | 'Accepted' | 'Rescheduled' | 'Completed',
+  ) => {
+    setStudentDoubtRequests((prev) => prev.map((request) => (
+      request.id === requestId ? { ...request, status } : request
+    )))
+    addToast(`Doubt request status updated to ${status}.`, 'success')
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
@@ -656,14 +821,81 @@ function App() {
                 role={currentUser?.role === 'faculty' ? 'faculty' : 'student'} 
                 onQuickStartMeeting={handleQuickStartMeeting}
                 onNavigate={(nav) => setSelectedNav(nav as AcademicNavItem)}
+                upcomingMeetings={studentUpcomingMeetings.map((meeting) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                }))}
+                attendanceHistory={studentAttendanceHistory.map(({ meeting, status }) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                  status,
+                }))}
+                notifications={activityNotifications.map((notification) => ({
+                  id: notification.id,
+                  title: notification.title,
+                  message: notification.message,
+                }))}
+                sharedResources={studentSharedResources.map((meeting) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                  hasRecording: Boolean(meeting.recording),
+                  hasSummary: Boolean(meeting.summary || meeting.keyPoints?.length),
+                  subject: getResourceSubject(meeting.title),
+                }))}
+                todayTimeline={studentTodayTimeline}
+                attendanceWeeklyTrend={studentAttendanceWeeklyTrend}
+                attendanceRiskThreshold={75}
+                reminderItems={studentReminderItems}
+                doubtRequests={studentDoubtRequests.map((request) => ({
+                  id: request.id,
+                  topic: request.topic,
+                  preferredSlot: request.preferredSlot,
+                  requestedBy: request.requestedBy,
+                  status: request.status,
+                  requestedAtLabel: request.createdAt.toLocaleString(),
+                }))}
+                onUpdateDoubtRequestStatus={handleUpdateDoubtRequestStatus}
+                onRequestDoubtSession={handleRequestDoubtSession}
               />
             )}
 
-            {selectedNav === 'academic-structure' && (
+            {selectedNav === 'academic-structure' && currentUser?.role === 'faculty' && (
               <AcademicStructure
                 facultyRoot={academicRoot}
                 facultyProfile={currentUser?.facultyProfile}
                 role={currentUser?.role === 'faculty' ? 'faculty' : 'student'}
+                studentUpcomingMeetings={studentUpcomingMeetings.map((meeting) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                }))}
+                studentAttendanceHistory={studentAttendanceHistory.map(({ meeting, status }) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                  status,
+                }))}
+                studentNotifications={activityNotifications.map((notification) => ({
+                  id: notification.id,
+                  title: notification.title,
+                  message: notification.message,
+                }))}
+                studentSharedResources={studentSharedResources.map((meeting) => ({
+                  id: meeting.id,
+                  title: meeting.title,
+                  date: meeting.date,
+                  recording: meeting.recording,
+                  summary: meeting.summary,
+                }))}
+                onOpenRecording={handlePlayRecording}
+                onDownloadResourceSummary={(meetingId) => {
+                  const meeting = meetingHistory.find((item) => item.id === meetingId)
+                  if (!meeting) return
+                  handleDownloadSummary(meeting)
+                }}
                 onStartMeetingForSection={handleStartMeetingForSection}
                 onInviteStudentToMeeting={(student: StudentRecord) => addToast(`Invited ${student.name} to a meeting.`, 'success')}
                 onSendMessageToStudent={(student: StudentRecord) => addToast(`Message sent to ${student.name}.`, 'success')}
@@ -672,51 +904,26 @@ function App() {
               />
             )}
 
-            {selectedNav === 'meetings' && (
+            {selectedNav === 'meetings' && currentUser?.role === 'faculty' && (
               <div className="glass rounded-2xl border border-white/10 p-6 text-slate-200">
                 <div className="text-white text-xl font-semibold mb-4">Meetings & Video Calls</div>
                 <div className="space-y-4">
-                  <CalendarIntegration
-                    meetings={scheduledMeetings}
-                    onSchedule={handleScheduleMeeting}
-                    onEdit={() => {}}
-                    onDelete={handleDeleteScheduledMeeting}
-                    onToast={addToast}
-                  />
+                  {currentUser?.role === 'faculty' && (
+                    <>
+                      <CalendarIntegration
+                        meetings={scheduledMeetings}
+                        onSchedule={handleScheduleMeeting}
+                        onEdit={() => {}}
+                        onDelete={handleDeleteScheduledMeeting}
+                        onToast={addToast}
+                      />
 
-                  <div className="text-slate-400 text-sm">
-                    Start a meeting by clicking the video icon next to any section in the Academic Structure.
-                  </div>
-
-                  {currentUser?.role === 'student' && (
-                    <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-4">
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <h3 className="text-cyan-300 font-medium">Join Meeting</h3>
-                          <p className="text-xs text-cyan-100/70 mt-1">Use a meeting ID from a faculty invite, QR code, or shared follow-up message.</p>
-                        </div>
-                        <div className="hidden sm:inline-flex items-center rounded-full bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200 border border-cyan-500/20">
-                          Student entry
-                        </div>
+                      <div className="text-slate-400 text-sm">
+                        Start a meeting by clicking the video icon next to any section in the Academic Structure.
                       </div>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          value={joinMeetingId}
-                          onChange={(e) => setJoinMeetingId(e.target.value)}
-                          placeholder="Enter Meeting ID"
-                          className="flex-1 px-4 py-2 rounded-lg bg-slate-800/70 border border-cyan-500/30 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
-                        />
-                        <button
-                          onClick={handleJoinMeeting}
-                          disabled={!canJoinMeeting}
-                          className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 disabled:bg-slate-700/50 disabled:text-slate-500 disabled:cursor-not-allowed rounded-lg transition-colors text-cyan-200 font-medium"
-                        >
-                          Join Meeting
-                        </button>
-                      </div>
-                    </div>
+                    </>
                   )}
-                  
+
                   {currentUser?.role === 'faculty' && (
                     <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
                       <h3 className="text-blue-300 font-medium mb-2">Quick Actions</h3>
@@ -758,7 +965,9 @@ function App() {
                     {recentMeetingPreview.length === 0 ? (
                       <EmptyState
                         message="No recent meetings yet"
-                        subMessage="Start or join a meeting and your latest session history will appear here for quick return access."
+                        subMessage={currentUser?.role === 'faculty'
+                          ? 'Start or join a meeting and your latest session history will appear here for quick return access.'
+                          : 'Join a meeting and your latest session history will appear here for quick return access.'}
                         action={currentUser?.role === 'faculty'
                           ? { label: 'Start Quick Meeting', onClick: handleQuickStartMeeting }
                           : undefined}
@@ -782,6 +991,45 @@ function App() {
               <div className="glass rounded-2xl border border-white/10 p-6 text-slate-200">
                 <div className="text-white text-xl font-semibold">Recordings</div>
                 <div className="text-slate-400 text-sm mt-1 mb-6">Meeting recordings and summaries appear below.</div>
+                {currentUser?.role === 'student' && (
+                  <div className="mb-4 rounded-lg border border-cyan-500/20 bg-cyan-500/10 p-4">
+                    <div className="flex items-center gap-2 text-cyan-200 font-medium mb-2">
+                      <Download className="w-4 h-4" /> Shared Resources
+                    </div>
+                    {studentSharedResources.length === 0 ? (
+                      <p className="text-xs text-cyan-100/70">No shared recordings/resources yet.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-56 overflow-auto pr-1">
+                        {studentSharedResources.map((meeting) => (
+                          <div key={meeting.id} className="rounded-md border border-white/10 bg-slate-900/45 px-3 py-2 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm text-slate-100 truncate">{meeting.title}</p>
+                              <p className="text-[11px] text-slate-400">{meeting.date.toLocaleDateString()}</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {meeting.recording && (
+                                <button
+                                  onClick={() => handlePlayRecording(meeting.recording!)}
+                                  className="px-2 py-1 text-[11px] rounded bg-blue-500/20 hover:bg-blue-500/30 text-blue-200"
+                                >
+                                  Open
+                                </button>
+                              )}
+                              {(meeting.summary || meeting.keyPoints?.length) && (
+                                <button
+                                  onClick={() => handleDownloadSummary(meeting)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200"
+                                >
+                                  <FileText className="w-3 h-3" /> Summary
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {meetingHistory.length === 0 ? (
                   <EmptyStateContainer>
                     <NoMeetingHistoryEmptyState />
@@ -796,10 +1044,7 @@ function App() {
               <div>
                 <div className="flex justify-end mb-4">
                   <button
-                    onClick={() => {
-                      setIsAuthenticated(false)
-                      setCurrentUser(null)
-                    }}
+                    onClick={handleLogout}
                     className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-colors font-medium"
                   >
                     Logout
@@ -819,6 +1064,12 @@ function App() {
       </div>
 
       <div className="fixed top-4 right-6 z-50 flex items-center gap-3">
+        <button
+          onClick={handleLogout}
+          className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/20 transition-colors text-sm font-medium"
+        >
+          Logout
+        </button>
         <NotificationBell
           unreadCount={activityNotifications.length}
           onBellClick={() => setShowNotificationPanel(true)}

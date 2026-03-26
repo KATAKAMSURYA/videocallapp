@@ -174,7 +174,9 @@ export default function HierarchicalSidebar({
           </div>
 
           <nav className="p-3 space-y-1 flex-shrink-0">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS
+              .filter((item) => userRole === 'faculty' || (item.id !== 'academic-structure' && item.id !== 'meetings'))
+              .map((item) => (
               <button
                 key={item.id}
                 onClick={() => onSelect(item.id)}
@@ -190,6 +192,7 @@ export default function HierarchicalSidebar({
             ))}
           </nav>
 
+          {userRole === 'faculty' && (
           <div className="px-3 border-t border-white/10 pt-3 flex-1 overflow-y-auto">
             <div className="flex items-center gap-2 px-3 py-2 mb-2">
               <GraduationCap className="w-4 h-4 text-slate-400" />
@@ -351,6 +354,7 @@ export default function HierarchicalSidebar({
               ))}
             </div>
           </div>
+          )}
 
           <div className="p-4 border-t border-white/10 text-xs text-slate-500 flex-shrink-0">
             {userRole === 'faculty' ? 'Faculty Dashboard' : 'Student Dashboard'}
