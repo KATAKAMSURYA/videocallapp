@@ -134,6 +134,8 @@ export default function MeetingRoom({
         }))
       : [],
   )
+  const [controlsVisible, setControlsVisible] = useState(true)
+  const controlHideTimer = useRef<number | null>(null)
 
   // Initialize camera and microphone
   useEffect(() => {
@@ -169,6 +171,31 @@ export default function MeetingRoom({
     }, 1000)
     
     return () => clearInterval(timer)
+  }, [])
+
+  // Reveal controls on movement/scroll, then hide after a short delay
+  useEffect(() => {
+    const scheduleHide = () => {
+      if (controlHideTimer.current) window.clearTimeout(controlHideTimer.current)
+      controlHideTimer.current = window.setTimeout(() => setControlsVisible(false), 2200)
+    }
+
+    const revealControls = () => {
+      setControlsVisible(true)
+      scheduleHide()
+    }
+
+    revealControls()
+    window.addEventListener('mousemove', revealControls)
+    window.addEventListener('scroll', revealControls, { passive: true })
+    window.addEventListener('touchmove', revealControls, { passive: true })
+
+    return () => {
+      window.removeEventListener('mousemove', revealControls)
+      window.removeEventListener('scroll', revealControls)
+      window.removeEventListener('touchmove', revealControls)
+      if (controlHideTimer.current) window.clearTimeout(controlHideTimer.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -1016,10 +1043,16 @@ export default function MeetingRoom({
       </div>
 
       {/* Enhanced Control Bar */}
-      <div className="bg-slate-900/90 backdrop-blur-sm border-t border-white/10 px-6 py-4">
+      <div
+        className={`fixed left-0 right-0 bottom-0 px-6 py-4 transition-all duration-300 ease-out backdrop-blur-lg border-t border-white/10 ${
+          controlsVisible ? 'opacity-100 translate-y-0 bg-slate-900/40' : 'opacity-0 translate-y-4 pointer-events-none bg-slate-900/20'
+        }`}
+        onMouseEnter={() => setControlsVisible(true)}
+        onMouseMove={() => setControlsVisible(true)}
+      >
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           {/* Left Side - Meeting Info */}
-          <div className="flex items-center gap-4 text-sm text-slate-400 min-w-0 flex-1">
+          <div className="flex items-center gap-4 text-sm text-slate-300 min-w-0 flex-1">
             {speakingQueue.length > 0 && currentUser.role === 'faculty' && (
               <div className="flex items-center gap-2 text-yellow-400">
                 <Hand className="w-4 h-4" />

@@ -7,10 +7,7 @@ import {
   CheckCircle2,
   Clapperboard,
   Settings,
-  ChevronRight,
 } from 'lucide-react'
-import type { AcademicFacultyRoot } from './HierarchicalSidebar'
-import { useState } from 'react'
 
 export type AcademicNavItem =
   | 'dashboard'
@@ -35,15 +32,9 @@ interface AcademicSidebarProps {
   isOpen: boolean
   selected: AcademicNavItem
   onSelect: (id: AcademicNavItem) => void
-  academicData?: AcademicFacultyRoot
-  onSelectSection?: (sectionId: string) => void
 }
 
-export default function AcademicSidebar({ isOpen, selected, onSelect, academicData, onSelectSection }: AcademicSidebarProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-
-  const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }))
-
+export default function AcademicSidebar({ isOpen, selected, onSelect }: AcademicSidebarProps) {
   return (
     <AnimatePresence initial={false}>
       <motion.aside
@@ -80,82 +71,7 @@ export default function AcademicSidebar({ isOpen, selected, onSelect, academicDa
                 <span className="font-medium">{item.label}</span>
               </button>
             ))}
-
-            {/* Hierarchical Academic Tree compact header (visual separator) */}
-            {academicData && (
-              <div className="mt-2 px-3 py-2 text-xs text-slate-400">Departments</div>
-            )}
           </nav>
-
-          {/* Academic hierarchy tree */}
-          {academicData && (
-            <div className="p-2 overflow-auto max-h-[calc(100vh-220px)]">
-              <div className="space-y-1">
-                <div>
-                  <button
-                    onClick={() => toggle(academicData.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/3 text-slate-200"
-                  >
-                    <div className="w-6 h-6 rounded-md bg-slate-800/80 flex items-center justify-center text-xs text-slate-300">F</div>
-                    <div className="flex-1 text-sm font-medium">{academicData.name}</div>
-                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded[academicData.id] ? 'rotate-90' : ''}`} />
-                  </button>
-
-                  {expanded[academicData.id] && (
-                    <div className="ml-3 mt-1 space-y-1">
-                      {academicData.departments.map((dept) => (
-                        <div key={dept.id}>
-                          <button
-                            onClick={() => toggle(dept.id)}
-                            className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/3 text-slate-200"
-                          >
-                            <div className="w-5 h-5 text-sky-400">📁</div>
-                            <div className="flex-1 text-sm">{dept.name}</div>
-                            <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded[dept.id] ? 'rotate-90' : ''}`} />
-                          </button>
-
-                          {expanded[dept.id] && (
-                            <div className="ml-3 mt-1 space-y-1">
-                              {(dept.branches || []).map((branch) => (
-                                <div key={branch.id}>
-                                  <button
-                                    onClick={() => toggle(branch.id)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/3 text-slate-200"
-                                  >
-                                    <div className="w-4 h-4 text-sky-300">📁</div>
-                                    <div className="flex-1 text-sm">{branch.name}</div>
-                                    <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded[branch.id] ? 'rotate-90' : ''}`} />
-                                  </button>
-
-                                  {expanded[branch.id] && (
-                                    <div className="ml-3 mt-1 space-y-1">
-                                      {branch.sections.map((section) => (
-                                        <button
-                                          key={section.id}
-                                          onClick={() => {
-                                            onSelect('academic-structure')
-                                            onSelectSection?.(section.id)
-                                          }}
-                                          className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 text-slate-300 text-sm"
-                                        >
-                                          <div className="w-2 h-2 rounded-full bg-slate-400/40" />
-                                          <div className="flex-1 text-sm">{section.name}</div>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
 
           <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10 text-xs text-slate-500">
             Sidebar stays fixed; content updates in the middle.

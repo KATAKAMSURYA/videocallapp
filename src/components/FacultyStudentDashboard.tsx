@@ -127,7 +127,7 @@ export default function FacultyStudentDashboard({
       <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-white">
-            {role === 'faculty' ? 'Faculty Dashboard' : 'Student Dashboard'}
+            {role === 'faculty' ? 'Dashboard' : 'Student Dashboard'}
           </h1>
           <p className="text-slate-300 mt-2">
             {role === 'faculty'

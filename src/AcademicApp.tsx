@@ -209,17 +209,6 @@ export default function AcademicApp() {
     return <LoginPage onLogin={handleLogin} onRegisterFaculty={handleRegisterFaculty} />
   }
 
-  const handleSidebarSelectSection = (sectionId: string) => {
-    // navigate to academic structure and highlight the section
-    setSelectedNav('academic-structure')
-    // pass selection via a small event in localStorage (simple cross-component signal)
-    try {
-      localStorage.setItem('selectedSectionId', sectionId)
-    } catch {
-      // ignore
-    }
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 font-sans">
       {/* Toggle Button */}
@@ -236,8 +225,6 @@ export default function AcademicApp() {
         isOpen={sidebarOpen}
         selected={selectedNav}
         onSelect={setSelectedNav}
-        academicData={academicRoot}
-        onSelectSection={handleSidebarSelectSection}
       />
 
       {/* Main Content Area */}

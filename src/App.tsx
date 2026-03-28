@@ -303,6 +303,23 @@ function App() {
     includeRecording: true,
     includeSummary: true,
   })
+  const persistLiveInvite = (invite: { id: string; title: string; sectionName: string; host: string; startedAt: Date }) => {
+    setLiveMeetingInvite(invite)
+    try {
+      localStorage.setItem('liveMeetingInvite', JSON.stringify({ ...invite, startedAt: invite.startedAt.toISOString() }))
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const clearLiveInvite = () => {
+    setLiveMeetingInvite(null)
+    try {
+      localStorage.removeItem('liveMeetingInvite')
+    } catch {
+      // ignore storage errors
+    }
+  }
 
   const handleLogin = (
     creds:
@@ -412,6 +429,27 @@ function App() {
     }
   }, [currentUser?.role, selectedNav])
 
+  // Restore any pending live invite (for students) from localStorage on load
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('liveMeetingInvite')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed?.id && parsed?.title && parsed?.sectionName && parsed?.host && parsed?.startedAt) {
+          setLiveMeetingInvite({
+            id: parsed.id,
+            title: parsed.title,
+            sectionName: parsed.sectionName,
+            host: parsed.host,
+            startedAt: new Date(parsed.startedAt),
+          })
+        }
+      }
+    } catch {
+      // ignore malformed data
+    }
+  }, [])
+
   // ==================== TOASTS ====================
   const [toasts, setToasts] = useState<ToastItem[]>([])
   const addToast = (message: string, type: ToastItem['type'] = 'info') => {
@@ -484,7 +522,7 @@ function App() {
     addToast(`Meeting started with ${selectedStudents.length} students from ${section.name}`, 'success')
     addActivityNotification('Meeting Started', `${meetingTitle} with ${selectedStudents.length} students.`)
 
-    setLiveMeetingInvite({
+    persistLiveInvite({
       id: meetingId,
       title: meetingTitle,
       sectionName: section.name,
@@ -546,7 +584,7 @@ function App() {
       addActivityNotification('Meeting Ended', `${currentMeeting.title} ended (${durationMinutes} min).`)
       setCurrentMeeting(null)
       setSelectedNav('recordings')
-      setLiveMeetingInvite(null)
+      clearLiveInvite()
     }
   }
 
@@ -555,6 +593,7 @@ function App() {
     if (!invite) return
     addToast('Join request sent to host', 'info')
     addActivityNotification('Join Request', `${currentUser?.name || 'Student'} wants to join ${invite.title}.`)
+    clearLiveInvite()
   }
 
   const handleSendMeetingPackage = (target: 'absent' | 'all') => {
@@ -640,11 +679,6 @@ function App() {
     addToast('Summary downloaded', 'success')
   }
 
-  const handleContactStudent = (student: StudentRecord) => {
-    addToast(`Contacting ${student.name} at ${student.email}`, 'info')
-    // Here you could implement actual contact functionality
-  }
-
   const handleQuickStartMeeting = () => {
     // Use the first section available (CSE Section A) for quick start
     const defaultSection = getFirstAvailableSection()
@@ -660,6 +694,7 @@ function App() {
     setCurrentUser(null)
     setSelectedNav('dashboard')
     setShowNotificationPanel(false)
+    clearLiveInvite()
   }
 
   if (!isAuthenticated) {
@@ -825,10 +860,7 @@ function App() {
         isOpen={sidebarOpen}
         selected={selectedNav}
         onSelect={setSelectedNav}
-        academicData={academicRoot}
         userRole={currentUser?.role || 'student'}
-        onStartMeeting={handleStartMeetingForSection}
-        onContactStudent={handleContactStudent}
       />
 
       <main
